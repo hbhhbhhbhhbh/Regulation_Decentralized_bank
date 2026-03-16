@@ -1,0 +1,304 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+import "./IdentityRegistry.sol";
+import "./RiskEngine.sol";
+import "./ComplianceLog.sol";
+
+/**
+ * @title BankVault
+ * @dev SafeHarbor 金库：KYC + CDD + AML 统一接入点。
+ * 为了减少依赖并避免版本差异，这里不再继承 OpenZeppelin 的 ReentrancyGuard/Pausable，
+ * 而是提供一个简单的 pause 标志与修饰器，演示逻辑保持不变。
+ */
+contract BankVault is AccessControl {
+    bytes32 public constant AUDITOR_ROLE = keccak256("AUDITOR_ROLE");
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+
+    IERC20 public immutable token;
+    IdentityRegistry public immutable identity;
+    RiskEngine public immutable riskEngine;
+    ComplianceLog public immutable logContract;
+
+    uint256 public constant TEN_K = 10_000 * 1e18;
+    uint256 public frequencyWindow = 60;
+    uint256 public maxTxPerWindow = 3;
+    uint256 public lockDuration = 1 hours;
+
+    mapping(address => uint256) public balances;
+
+    struct DailyStats {
+        uint256 day;
+        uint256 spent;
+    }
+    mapping(address => DailyStats) public dailyStats;
+
+    struct FrequencyStats {
+        uint256 windowStart;
+        uint256 count;
+    }
+    mapping(address => FrequencyStats) public freqStats;
+
+    mapping(address => uint256) public lockedUntil;
+    mapping(address => bool) public blacklisted;
+
+    enum EscrowStatus {
+        Pending,
+        Approved,
+        Rejected
+    }
+
+    struct EscrowTransfer {
+        address from;
+        address to;
+        uint256 amount;
+        EscrowStatus status;
+        uint256 createdAt;
+        uint256 approvals;
+        mapping(address => bool) approvedBy;
+    }
+
+    uint256 public nextCaseId = 1;
+    mapping(uint256 => EscrowTransfer) private escrows;
+
+    bool public paused;
+
+    event Deposited(address indexed user, uint256 amount);
+    event Withdrawn(address indexed user, uint256 amount);
+    event ImmediateTransfer(address indexed from, address indexed to, uint256 amount);
+    event EscrowCreated(uint256 indexed caseId, address indexed from, address indexed to, uint256 amount);
+    event LoanRequested(address indexed borrower, uint256 principal, uint256 rateBps);
+    event LoanRepaid(address indexed borrower, uint256 amount);
+
+    constructor(
+        IERC20 _token,
+        IdentityRegistry _identity,
+        RiskEngine _risk,
+        ComplianceLog _log
+    ) {
+        token = _token;
+        identity = _identity;
+        riskEngine = _risk;
+        logContract = _log;
+
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ADMIN_ROLE, msg.sender);
+    }
+
+    modifier onlyAdmin() {
+        require(hasRole(ADMIN_ROLE, msg.sender), "not admin");
+        _;
+    }
+
+    modifier onlyCompliantUser() {
+        require(identity.hasValidSBT(msg.sender), "KYC/SBT required");
+        require(!blacklisted[msg.sender], "blacklisted");
+        require(block.timestamp >= lockedUntil[msg.sender], "account locked");
+        _;
+    }
+
+    modifier whenNotPaused() {
+        require(!paused, "paused");
+        _;
+    }
+
+    function deposit(uint256 amount) external whenNotPaused onlyCompliantUser {
+        require(amount > 0, "amount=0");
+        balances[msg.sender] += amount;
+        require(token.transferFrom(msg.sender, address(this), amount), "transferFrom failed");
+        emit Deposited(msg.sender, amount);
+    }
+
+    function withdraw(uint256 amount) external whenNotPaused onlyCompliantUser {
+        require(amount > 0, "amount=0");
+        require(balances[msg.sender] >= amount, "insufficient");
+        balances[msg.sender] -= amount;
+        require(token.transfer(msg.sender, amount), "transfer failed");
+        emit Withdrawn(msg.sender, amount);
+    }
+
+    function transfer(address to, uint256 amount)
+        external
+        whenNotPaused
+        onlyCompliantUser
+    {
+        require(to != address(0), "invalid to");
+        require(amount > 0, "amount=0");
+        require(!blacklisted[to], "recipient blacklisted");
+
+        _applyFrequencyChecks(msg.sender);
+        _applyDailyLimitAndPotentialEscrow(msg.sender, to, amount);
+    }
+
+    function internalTransfer(address from, address to, uint256 amount) internal {
+        require(balances[from] >= amount, "insufficient");
+        balances[from] -= amount;
+        balances[to] += amount;
+        emit ImmediateTransfer(from, to, amount);
+    }
+
+    function _applyFrequencyChecks(address user) internal {
+        FrequencyStats storage f = freqStats[user];
+        uint256 nowTs = block.timestamp;
+
+        if (nowTs > f.windowStart + frequencyWindow) {
+            f.windowStart = nowTs;
+            f.count = 1;
+        } else {
+            f.count += 1;
+        }
+
+        if (f.count > maxTxPerWindow) {
+            lockedUntil[user] = nowTs + lockDuration;
+            logContract.emitAMLAlert(user, "FREQUENCY", "Too many transfers in short window");
+            logContract.emitAccountLocked(user, lockedUntil[user], "Frequency breach");
+        }
+    }
+
+    function _applyDailyLimitAndPotentialEscrow(
+        address from,
+        address to,
+        uint256 amount
+    ) internal {
+        DailyStats storage ds = dailyStats[from];
+        uint256 today = block.timestamp / 1 days;
+        if (ds.day != today) {
+            ds.day = today;
+            ds.spent = 0;
+        }
+
+        uint256 userLimit = riskEngine.getDailyLimit(from);
+        bool breachDaily = (ds.spent + amount > userLimit);
+        bool isLargeTx = amount >= TEN_K;
+
+        if (breachDaily || isLargeTx) {
+            uint256 caseId = _createEscrow(from, to, amount, breachDaily, isLargeTx);
+            ds.spent += amount;
+            logContract.emitTransferRequested(caseId, from, to, amount);
+        } else {
+            ds.spent += amount;
+            internalTransfer(from, to, amount);
+        }
+    }
+
+    function _createEscrow(
+        address from,
+        address to,
+        uint256 amount,
+        bool breachDaily,
+        bool isLargeTx
+    ) internal returns (uint256 caseId) {
+        require(balances[from] >= amount, "insufficient");
+
+        balances[from] -= amount;
+
+        caseId = nextCaseId++;
+        EscrowTransfer storage e = escrows[caseId];
+        e.from = from;
+        e.to = to;
+        e.amount = amount;
+        e.status = EscrowStatus.Pending;
+        e.createdAt = block.timestamp;
+
+        string memory reason = breachDaily
+            ? "DAILY_LIMIT"
+            : (isLargeTx ? "LARGE_TX" : "OTHER");
+
+        emit EscrowCreated(caseId, from, to, amount);
+        logContract.emitTransferEscrowed(caseId, from, to, amount, reason);
+        logContract.emitAMLAlert(from, reason, "Escrowed for manual review");
+    }
+
+    function approveEscrow(uint256 caseId) external whenNotPaused onlyRole(AUDITOR_ROLE) {
+        EscrowTransfer storage e = escrows[caseId];
+        require(e.status == EscrowStatus.Pending, "not pending");
+        require(!e.approvedBy[msg.sender], "already approved");
+
+        e.approvedBy[msg.sender] = true;
+        e.approvals += 1;
+
+        logContract.emitTransferApproved(caseId, msg.sender);
+
+        if (e.approvals >= 2) {
+            e.status = EscrowStatus.Approved;
+            balances[e.to] += e.amount;
+        }
+    }
+
+    function rejectEscrow(uint256 caseId, string calldata reason)
+        external
+        whenNotPaused
+        onlyRole(AUDITOR_ROLE)
+    {
+        EscrowTransfer storage e = escrows[caseId];
+        require(e.status == EscrowStatus.Pending, "not pending");
+
+        e.status = EscrowStatus.Rejected;
+        balances[e.from] += e.amount;
+
+        logContract.emitTransferRejected(caseId, msg.sender, reason);
+    }
+
+    function setBlacklist(address user, bool isBlacklisted_) external onlyAdmin {
+        blacklisted[user] = isBlacklisted_;
+        logContract.emitBlacklistUpdated(user, isBlacklisted_);
+    }
+
+    function forceLockAccount(address user, uint256 until, string calldata reason) external onlyAdmin {
+        lockedUntil[user] = until;
+        logContract.emitAccountLocked(user, until, reason);
+    }
+
+    function unlockAccount(address user) external onlyAdmin {
+        lockedUntil[user] = 0;
+        logContract.emitAccountUnlocked(user);
+    }
+
+    function addAuditor(address auditor) external onlyAdmin {
+        _grantRole(AUDITOR_ROLE, auditor);
+        logContract.emitAuditorAdded(auditor);
+    }
+
+    function removeAuditor(address auditor) external onlyAdmin {
+        _revokeRole(AUDITOR_ROLE, auditor);
+        logContract.emitAuditorRemoved(auditor);
+    }
+
+    function requestLoan(uint256 principal) external whenNotPaused onlyCompliantUser {
+        require(principal > 0, "principal=0");
+        uint256 rateBps = riskEngine.getInterestRateBps(msg.sender);
+        emit LoanRequested(msg.sender, principal, rateBps);
+    }
+
+    function repayLoan(uint256 amount) external whenNotPaused onlyCompliantUser {
+        require(amount > 0, "amount=0");
+        require(token.transferFrom(msg.sender, address(this), amount), "transferFrom failed");
+        emit LoanRepaid(msg.sender, amount);
+    }
+
+    function setFrequencyParams(uint256 windowSec, uint256 maxCount, uint256 lockSec)
+        external
+        onlyAdmin
+    {
+        frequencyWindow = windowSec;
+        maxTxPerWindow = maxCount;
+        lockDuration = lockSec;
+        logContract.emitGlobalParamUpdated(
+            "FREQUENCY",
+            bytes32(0),
+            keccak256(abi.encode(windowSec, maxCount, lockSec))
+        );
+    }
+
+    function pause() external onlyAdmin {
+        paused = true;
+    }
+
+    function unpause() external onlyAdmin {
+        paused = false;
+    }
+}
+
