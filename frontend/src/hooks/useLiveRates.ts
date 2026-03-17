@@ -6,8 +6,24 @@ import {
   FALLBACK_SUSD_VS_FIAT,
 } from "../data/rates";
 
+// 主流币价格：BTC、ETH、USDT + 一批常见主流币
+// CoinGecko id 与 symbol 映射
+const COIN_IDS: Record<string, string> = {
+  BTC: "bitcoin",
+  ETH: "ethereum",
+  USDT: "tether",
+  BNB: "binancecoin",
+  SOL: "solana",
+  XRP: "ripple",
+  ADA: "cardano",
+  DOGE: "dogecoin",
+  LTC: "litecoin",
+};
+
 const COINGECKO_URL =
-  "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether&vs_currencies=usd&include_24hr_change=true";
+  "https://api.coingecko.com/api/v3/simple/price?ids=" +
+  Object.values(COIN_IDS).join(",") +
+  "&vs_currencies=usd&include_24hr_change=true";
 const EXCHANGERATE_URL = "https://api.exchangerate-api.com/v4/latest/USD";
 
 const FIAT_CODES = ["EUR", "GBP", "JPY", "CNY", "HKD"] as const;
@@ -44,14 +60,13 @@ export function useLiveRates(pollIntervalMs = 60_000): LiveRatesState {
       if (!cryptoRes.ok) throw new Error("加密货币价格获取失败");
       if (!fiatRes.ok) throw new Error("外汇汇率获取失败");
 
-      const crypto = (await cryptoRes.json()) as {
-        bitcoin?: { usd?: number; usd_24h_change?: number };
-        ethereum?: { usd?: number; usd_24h_change?: number };
-        tether?: { usd?: number; usd_24h_change?: number };
-      };
+      const crypto = (await cryptoRes.json()) as Record<
+        string,
+        { usd?: number; usd_24h_change?: number }
+      >;
       const fiat = (await fiatRes.json()) as { base: string; rates: Record<string, number> };
 
-      const usdtPrice = crypto.tether?.usd ?? 1;
+      const usdtPrice = crypto[COIN_IDS.USDT]?.usd ?? 1;
       const sUSDPrice = usdtPrice;
 
       const sUSDvsFiatList: SUsdVsFiat[] = [
@@ -71,32 +86,29 @@ export function useLiveRates(pollIntervalMs = 60_000): LiveRatesState {
       }
       setSUSDvsFiat(sUSDvsFiatList);
 
-      const assets: AssetPriceUSD[] = [
-        {
-          symbol: "BTC",
-          name: CURRENCY_META.BTC ?? "比特币",
-          priceUSD: crypto.bitcoin?.usd ?? 0,
-          change24h: crypto.bitcoin?.usd_24h_change,
-        },
-        {
-          symbol: "ETH",
-          name: CURRENCY_META.ETH ?? "以太坊",
-          priceUSD: crypto.ethereum?.usd ?? 0,
-          change24h: crypto.ethereum?.usd_24h_change,
-        },
-        {
-          symbol: "USDT",
-          name: CURRENCY_META.USDT ?? "泰达币",
-          priceUSD: usdtPrice,
-          change24h: crypto.tether?.usd_24h_change,
-        },
-        {
-          symbol: "sUSD",
-          name: CURRENCY_META.sUSD ?? "SafeHarbor USD",
-          priceUSD: sUSDPrice,
-          change24h: crypto.tether?.usd_24h_change,
-        },
-      ];
+      const assets: AssetPriceUSD[] = [];
+
+      // 主流加密资产
+      for (const [symbol, id] of Object.entries(COIN_IDS)) {
+        const row = crypto[id];
+        const priceUSD = row?.usd ?? 0;
+        const change = row?.usd_24h_change;
+        if (!priceUSD) continue;
+        assets.push({
+          symbol,
+          name: CURRENCY_META[symbol] ?? symbol,
+          priceUSD,
+          change24h: change,
+        });
+      }
+
+      // 银行币 sUSD：与 USDT 同价
+      assets.push({
+        symbol: "sUSD",
+        name: CURRENCY_META.sUSD ?? "SafeHarbor USD",
+        priceUSD: sUSDPrice,
+        change24h: crypto[COIN_IDS.USDT]?.usd_24h_change,
+      });
       for (const code of FIAT_CODES) {
         const rate = fiat.rates?.[code];
         if (rate != null && rate > 0) {

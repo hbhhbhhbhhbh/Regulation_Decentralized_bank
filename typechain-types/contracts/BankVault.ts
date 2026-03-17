@@ -37,6 +37,7 @@ export interface BankVaultInterface extends Interface {
       | "dailyStats"
       | "deposit"
       | "depositApyBps"
+      | "depositFromExternal"
       | "forceLockAccount"
       | "freqStats"
       | "frequencyWindow"
@@ -50,8 +51,10 @@ export interface BankVaultInterface extends Interface {
       | "logContract"
       | "maxTxPerWindow"
       | "nextCaseId"
+      | "nextRedeemId"
       | "pause"
       | "paused"
+      | "redeemToAsset"
       | "rejectEscrow"
       | "removeAuditor"
       | "renounceRole"
@@ -73,10 +76,13 @@ export interface BankVaultInterface extends Interface {
   getEvent(
     nameOrSignatureOrTopic:
       | "Deposited"
+      | "EscrowApproved"
       | "EscrowCreated"
+      | "EscrowRejected"
       | "ImmediateTransfer"
       | "LoanRepaid"
       | "LoanRequested"
+      | "RedeemRequested"
       | "RoleAdminChanged"
       | "RoleGranted"
       | "RoleRevoked"
@@ -123,6 +129,10 @@ export interface BankVaultInterface extends Interface {
   encodeFunctionData(
     functionFragment: "depositApyBps",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "depositFromExternal",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "forceLockAccount",
@@ -173,8 +183,16 @@ export interface BankVaultInterface extends Interface {
     functionFragment: "nextCaseId",
     values?: undefined
   ): string;
+  encodeFunctionData(
+    functionFragment: "nextRedeemId",
+    values?: undefined
+  ): string;
   encodeFunctionData(functionFragment: "pause", values?: undefined): string;
   encodeFunctionData(functionFragment: "paused", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "redeemToAsset",
+    values: [string, BigNumberish]
+  ): string;
   encodeFunctionData(
     functionFragment: "rejectEscrow",
     values: [BigNumberish, string]
@@ -261,6 +279,10 @@ export interface BankVaultInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "depositFromExternal",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "forceLockAccount",
     data: BytesLike
   ): Result;
@@ -294,8 +316,16 @@ export interface BankVaultInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "nextCaseId", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "nextRedeemId",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "pause", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "redeemToAsset",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "rejectEscrow",
     data: BytesLike
@@ -354,6 +384,31 @@ export namespace DepositedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace EscrowApprovedEvent {
+  export type InputTuple = [
+    caseId: BigNumberish,
+    from: AddressLike,
+    to: AddressLike,
+    amount: BigNumberish
+  ];
+  export type OutputTuple = [
+    caseId: bigint,
+    from: string,
+    to: string,
+    amount: bigint
+  ];
+  export interface OutputObject {
+    caseId: bigint;
+    from: string;
+    to: string;
+    amount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace EscrowCreatedEvent {
   export type InputTuple = [
     caseId: BigNumberish,
@@ -372,6 +427,34 @@ export namespace EscrowCreatedEvent {
     from: string;
     to: string;
     amount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace EscrowRejectedEvent {
+  export type InputTuple = [
+    caseId: BigNumberish,
+    from: AddressLike,
+    to: AddressLike,
+    amount: BigNumberish,
+    reason: string
+  ];
+  export type OutputTuple = [
+    caseId: bigint,
+    from: string,
+    to: string,
+    amount: bigint,
+    reason: string
+  ];
+  export interface OutputObject {
+    caseId: bigint;
+    from: string;
+    to: string;
+    amount: bigint;
+    reason: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -425,6 +508,31 @@ export namespace LoanRequestedEvent {
     borrower: string;
     principal: bigint;
     rateBps: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace RedeemRequestedEvent {
+  export type InputTuple = [
+    redeemId: BigNumberish,
+    user: AddressLike,
+    assetSymbol: string,
+    susdAmount: BigNumberish
+  ];
+  export type OutputTuple = [
+    redeemId: bigint,
+    user: string,
+    assetSymbol: string,
+    susdAmount: bigint
+  ];
+  export interface OutputObject {
+    redeemId: bigint;
+    user: string;
+    assetSymbol: string;
+    susdAmount: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -576,6 +684,12 @@ export interface BankVault extends BaseContract {
 
   depositApyBps: TypedContractMethod<[], [bigint], "view">;
 
+  depositFromExternal: TypedContractMethod<
+    [susdAmount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
   forceLockAccount: TypedContractMethod<
     [user: AddressLike, until: BigNumberish, reason: string],
     [void],
@@ -631,9 +745,17 @@ export interface BankVault extends BaseContract {
 
   nextCaseId: TypedContractMethod<[], [bigint], "view">;
 
+  nextRedeemId: TypedContractMethod<[], [bigint], "view">;
+
   pause: TypedContractMethod<[], [void], "nonpayable">;
 
   paused: TypedContractMethod<[], [boolean], "view">;
+
+  redeemToAsset: TypedContractMethod<
+    [assetSymbol: string, susdAmount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
 
   rejectEscrow: TypedContractMethod<
     [caseId: BigNumberish, reason: string],
@@ -749,6 +871,9 @@ export interface BankVault extends BaseContract {
     nameOrSignature: "depositApyBps"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "depositFromExternal"
+  ): TypedContractMethod<[susdAmount: BigNumberish], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "forceLockAccount"
   ): TypedContractMethod<
     [user: AddressLike, until: BigNumberish, reason: string],
@@ -817,11 +942,21 @@ export interface BankVault extends BaseContract {
     nameOrSignature: "nextCaseId"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "nextRedeemId"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "pause"
   ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "paused"
   ): TypedContractMethod<[], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "redeemToAsset"
+  ): TypedContractMethod<
+    [assetSymbol: string, susdAmount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
   getFunction(
     nameOrSignature: "rejectEscrow"
   ): TypedContractMethod<
@@ -903,11 +1038,25 @@ export interface BankVault extends BaseContract {
     DepositedEvent.OutputObject
   >;
   getEvent(
+    key: "EscrowApproved"
+  ): TypedContractEvent<
+    EscrowApprovedEvent.InputTuple,
+    EscrowApprovedEvent.OutputTuple,
+    EscrowApprovedEvent.OutputObject
+  >;
+  getEvent(
     key: "EscrowCreated"
   ): TypedContractEvent<
     EscrowCreatedEvent.InputTuple,
     EscrowCreatedEvent.OutputTuple,
     EscrowCreatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "EscrowRejected"
+  ): TypedContractEvent<
+    EscrowRejectedEvent.InputTuple,
+    EscrowRejectedEvent.OutputTuple,
+    EscrowRejectedEvent.OutputObject
   >;
   getEvent(
     key: "ImmediateTransfer"
@@ -929,6 +1078,13 @@ export interface BankVault extends BaseContract {
     LoanRequestedEvent.InputTuple,
     LoanRequestedEvent.OutputTuple,
     LoanRequestedEvent.OutputObject
+  >;
+  getEvent(
+    key: "RedeemRequested"
+  ): TypedContractEvent<
+    RedeemRequestedEvent.InputTuple,
+    RedeemRequestedEvent.OutputTuple,
+    RedeemRequestedEvent.OutputObject
   >;
   getEvent(
     key: "RoleAdminChanged"
@@ -971,6 +1127,17 @@ export interface BankVault extends BaseContract {
       DepositedEvent.OutputObject
     >;
 
+    "EscrowApproved(uint256,address,address,uint256)": TypedContractEvent<
+      EscrowApprovedEvent.InputTuple,
+      EscrowApprovedEvent.OutputTuple,
+      EscrowApprovedEvent.OutputObject
+    >;
+    EscrowApproved: TypedContractEvent<
+      EscrowApprovedEvent.InputTuple,
+      EscrowApprovedEvent.OutputTuple,
+      EscrowApprovedEvent.OutputObject
+    >;
+
     "EscrowCreated(uint256,address,address,uint256)": TypedContractEvent<
       EscrowCreatedEvent.InputTuple,
       EscrowCreatedEvent.OutputTuple,
@@ -980,6 +1147,17 @@ export interface BankVault extends BaseContract {
       EscrowCreatedEvent.InputTuple,
       EscrowCreatedEvent.OutputTuple,
       EscrowCreatedEvent.OutputObject
+    >;
+
+    "EscrowRejected(uint256,address,address,uint256,string)": TypedContractEvent<
+      EscrowRejectedEvent.InputTuple,
+      EscrowRejectedEvent.OutputTuple,
+      EscrowRejectedEvent.OutputObject
+    >;
+    EscrowRejected: TypedContractEvent<
+      EscrowRejectedEvent.InputTuple,
+      EscrowRejectedEvent.OutputTuple,
+      EscrowRejectedEvent.OutputObject
     >;
 
     "ImmediateTransfer(address,address,uint256)": TypedContractEvent<
@@ -1013,6 +1191,17 @@ export interface BankVault extends BaseContract {
       LoanRequestedEvent.InputTuple,
       LoanRequestedEvent.OutputTuple,
       LoanRequestedEvent.OutputObject
+    >;
+
+    "RedeemRequested(uint256,address,string,uint256)": TypedContractEvent<
+      RedeemRequestedEvent.InputTuple,
+      RedeemRequestedEvent.OutputTuple,
+      RedeemRequestedEvent.OutputObject
+    >;
+    RedeemRequested: TypedContractEvent<
+      RedeemRequestedEvent.InputTuple,
+      RedeemRequestedEvent.OutputTuple,
+      RedeemRequestedEvent.OutputObject
     >;
 
     "RoleAdminChanged(bytes32,bytes32,bytes32)": TypedContractEvent<

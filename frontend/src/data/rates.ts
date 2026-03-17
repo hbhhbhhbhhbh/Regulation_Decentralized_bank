@@ -26,6 +26,12 @@ export const CURRENCY_META: Record<string, string> = {
   ETH: "以太坊",
   USDT: "泰达币",
   sUSD: "SafeHarbor USD",
+  BNB: "币安币",
+  SOL: "Solana",
+  XRP: "瑞波币",
+  ADA: "Cardano",
+  DOGE: "狗狗币",
+  LTC: "莱特币",
 };
 
 export function formatPriceUSD(value: number): string {

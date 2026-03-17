@@ -122,6 +122,39 @@ body {
   width: 100%;
 }
 
+.main-nav {
+  margin-bottom: 16px;
+}
+
+.nav-tabs {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.nav-tab {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.nav-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.nav-tab.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* ---------- Panels ---------- */
 .panel {
   background: var(--bg-card);
@@ -234,6 +267,38 @@ body {
   margin: 0 0 12px;
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+.rate-card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.view-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid var(--border);
+}
+
+.toggle-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.toggle-btn.active {
+  background: var(--accent);
+  color: #fff;
 }
 
 .rates-table {
@@ -377,6 +442,16 @@ body {
   min-width: 120px;
 }
 
+.form-row select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: var(--font);
+}
+
 .form-row input.input-inline {
   min-width: 100px;
 }
@@ -406,6 +481,30 @@ body {
 .form-row button:hover {
   border-color: var(--accent);
   background: var(--accent-dim);
+}
+
+.subtabs {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.subtab {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.subtab.active {
+  background: var(--accent);
+  color: #fff;
 }
 
 .error-msg {

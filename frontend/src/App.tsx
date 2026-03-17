@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { WalletProvider, useWallet } from "./context/WalletContext";
 import { RatesProvider } from "./context/RatesContext";
 import { RatesPanel } from "./components/RatesPanel";
@@ -9,8 +9,16 @@ import { AdminDashboard } from "./components/AdminDashboard";
 
 function AppContent() {
   const { address, role, connect, disconnect } = useWallet();
+  const [activeTab, setActiveTab] = useState<"bank" | "user" | "auditor" | "admin">("bank");
 
   const isGuestOrNone = !address || role === "none";
+
+  const handleTabClick = (tab: "bank" | "user" | "auditor" | "admin") => {
+    if (tab === "user" && role !== "user") return;
+    if (tab === "auditor" && role !== "auditor") return;
+    if (tab === "admin" && role !== "admin") return;
+    setActiveTab(tab);
+  };
 
   return (
     <div className="app">
@@ -43,11 +51,63 @@ function AppContent() {
         </div>
       </header>
       <main className="app-main">
+        <div className="main-nav">
+          <div className="nav-tabs">
+            <button
+              type="button"
+              className={activeTab === "bank" ? "nav-tab active" : "nav-tab"}
+              onClick={() => handleTabClick("bank")}
+            >
+              银行首页
+            </button>
+            <button
+              type="button"
+              className={
+                activeTab === "user"
+                  ? "nav-tab active"
+                  : role === "user"
+                  ? "nav-tab"
+                  : "nav-tab disabled"
+              }
+              onClick={() => handleTabClick("user")}
+            >
+              用户
+            </button>
+            <button
+              type="button"
+              className={
+                activeTab === "auditor"
+                  ? "nav-tab active"
+                  : role === "auditor"
+                  ? "nav-tab"
+                  : "nav-tab disabled"
+              }
+              onClick={() => handleTabClick("auditor")}
+            >
+              审计员
+            </button>
+            <button
+              type="button"
+              className={
+                activeTab === "admin"
+                  ? "nav-tab active"
+                  : role === "admin"
+                  ? "nav-tab"
+                  : "nav-tab disabled"
+              }
+              onClick={() => handleTabClick("admin")}
+            >
+              管理员
+            </button>
+          </div>
+        </div>
+
         <RatesPanel />
-        {isGuestOrNone && <PublicBankView />}
-        {address && role === "user" && <UserDashboard />}
-        {address && role === "auditor" && <AuditorDashboard />}
-        {address && role === "admin" && <AdminDashboard />}
+
+        {activeTab === "bank" && <PublicBankView />}
+        {activeTab === "user" && address && role === "user" && <UserDashboard />}
+        {activeTab === "auditor" && address && role === "auditor" && <AuditorDashboard />}
+        {activeTab === "admin" && address && role === "admin" && <AdminDashboard />}
       </main>
     </div>
   );

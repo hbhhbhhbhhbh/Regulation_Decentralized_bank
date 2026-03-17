@@ -28,6 +28,7 @@ contract BankVault is AccessControl {
     uint256 public maxTxPerWindow = 3;
     uint256 public lockDuration = 1 hours;
 
+    /// @dev 银行内部 sUSD 账本余额（不等于用户钱包中的代币余额）
     mapping(address => uint256) public balances;
 
     struct DailyStats {
@@ -64,6 +65,9 @@ contract BankVault is AccessControl {
     uint256 public nextCaseId = 1;
     mapping(uint256 => EscrowTransfer) private escrows;
 
+    /// @dev 外部币赎回申请自增 ID
+    uint256 public nextRedeemId = 1;
+
     bool public paused;
 
     /// @dev 存款年化利率 (bps)，对外展示用；管理员可调
@@ -73,8 +77,18 @@ contract BankVault is AccessControl {
     event Withdrawn(address indexed user, uint256 amount);
     event ImmediateTransfer(address indexed from, address indexed to, uint256 amount);
     event EscrowCreated(uint256 indexed caseId, address indexed from, address indexed to, uint256 amount);
+    event EscrowApproved(uint256 indexed caseId, address indexed from, address indexed to, uint256 amount);
+    event EscrowRejected(uint256 indexed caseId, address indexed from, address indexed to, uint256 amount, string reason);
     event LoanRequested(address indexed borrower, uint256 principal, uint256 rateBps);
     event LoanRepaid(address indexed borrower, uint256 amount);
+
+    /// @dev 用户申请将银行 sUSD 余额赎回为某种外部资产（实际兑付由银行后台处理）
+    event RedeemRequested(
+        uint256 indexed redeemId,
+        address indexed user,
+        string assetSymbol,
+        uint256 susdAmount
+    );
 
     constructor(
         IERC20 _token,
@@ -113,6 +127,14 @@ contract BankVault is AccessControl {
         balances[msg.sender] += amount;
         require(token.transferFrom(msg.sender, address(this), amount), "transferFrom failed");
         emit Deposited(msg.sender, amount);
+    }
+
+    /// @notice 仅根据外部资产价值，直接为用户记入 sUSD 账本余额。
+    /// @dev 不从用户钱包收取任何 ERC20 代币，适用于外部 BTC/ETH 等通过链下渠道入金的场景。
+    function depositFromExternal(uint256 susdAmount) external whenNotPaused onlyCompliantUser {
+        require(susdAmount > 0, "susd=0");
+        balances[msg.sender] += susdAmount;
+        emit Deposited(msg.sender, susdAmount);
     }
 
     function withdraw(uint256 amount) external whenNotPaused onlyCompliantUser {
@@ -228,6 +250,7 @@ contract BankVault is AccessControl {
         if (e.approvals >= 2) {
             e.status = EscrowStatus.Approved;
             balances[e.to] += e.amount;
+            emit EscrowApproved(caseId, e.from, e.to, e.amount);
         }
     }
 
@@ -242,6 +265,21 @@ contract BankVault is AccessControl {
         e.status = EscrowStatus.Rejected;
         balances[e.from] += e.amount;
 
+        // 将被托管占用的当日额度归还给用户
+        DailyStats storage ds = dailyStats[e.from];
+        uint256 today = block.timestamp / 1 days;
+        if (ds.day != today) {
+            ds.day = today;
+            ds.spent = 0;
+        } else {
+            if (ds.spent >= e.amount) {
+                ds.spent -= e.amount;
+            } else {
+                ds.spent = 0;
+            }
+        }
+
+        emit EscrowRejected(caseId, e.from, e.to, e.amount, reason);
         logContract.emitTransferRejected(caseId, msg.sender, reason);
     }
 
@@ -319,6 +357,22 @@ contract BankVault is AccessControl {
 
     function setDepositApyBps(uint256 bps) external onlyAdmin {
         depositApyBps = bps;
+    }
+
+    /// @notice 用户申请将银行内部 sUSD 余额赎回为某种外部资产（BTC/ETH/USDT 等）。
+    /// @dev 合约仅扣减账本并发出事件，实际兑付由银行后台/运营系统依据该事件处理。
+    function redeemToAsset(string calldata assetSymbol, uint256 susdAmount)
+        external
+        whenNotPaused
+        onlyCompliantUser
+    {
+        require(susdAmount > 0, "susd=0");
+        require(balances[msg.sender] >= susdAmount, "insufficient");
+
+        balances[msg.sender] -= susdAmount;
+
+        uint256 redeemId = nextRedeemId++;
+        emit RedeemRequested(redeemId, msg.sender, assetSymbol, susdAmount);
     }
 }
 

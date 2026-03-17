@@ -5,7 +5,11 @@ import * as path from "path";
 const FRONTEND_CONTRACTS = path.join(__dirname, "..", "frontend", "src", "contracts");
 
 async function main() {
-  const [deployer] = await ethers.getSigners();
+  const signers = await ethers.getSigners();
+  const deployer = signers[0];
+  const testUser = signers[1];
+  const auditor1 = signers[2];
+  const auditor2 = signers[3];
 
   console.log("Deploying contracts with:", deployer.address);
 
@@ -51,6 +55,14 @@ async function main() {
   await riskEngine.grantRole(RISK_OFFICER, deployer.address);
   console.log("Granted KYC_OFFICER and RISK_OFFICER to deployer.");
 
+  // Auto-setup: one KYC'ed user + two auditors for local testing
+  const dailyLimit = ethers.parseEther("50000");
+  await identity.registerKYC(testUser.address, 40, "HK");
+  await riskEngine.initRisk(testUser.address, 40, dailyLimit);
+  await bankVault.addAuditor(auditor1.address);
+  await bankVault.addAuditor(auditor2.address);
+  console.log("Initialized test user and two auditors for local testing.");
+
   // Write addresses for frontend
   if (!fs.existsSync(FRONTEND_CONTRACTS)) {
     fs.mkdirSync(FRONTEND_CONTRACTS, { recursive: true });
@@ -88,7 +100,6 @@ async function main() {
   console.log("Wrote frontend/src/contracts/addresses.json and abis.");
 
   // 角色说明：部署后哪些地址是哪些角色
-  const signers = await ethers.getSigners();
   console.log("\n========== 角色与地址 (Roles & Addresses) ==========");
   console.log("【管理员 Admin】");
   console.log("  ", deployer.address, "  ← 部署账户（同时具备 KYC 官、风险官、sUSD 铸币权限）");
