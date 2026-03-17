@@ -1,65 +1,137 @@
-import React from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { useWallet } from "../context/WalletContext";
+import { formatEther } from "ethers";
 
-const mockCases = [
-  {
-    caseId: 1,
-    from: "0xAlice...",
-    to: "0xBob...",
-    amount: 20000,
-    reason: "LARGE_TX",
-    approvals: 1
-  },
-  {
-    caseId: 2,
-    from: "0xCarol...",
-    to: "0xDex...",
-    amount: 60000,
-    reason: "DAILY_LIMIT",
-    approvals: 0
-  }
-];
+type EscrowRow = {
+  caseId: number;
+  from: string;
+  to: string;
+  amount: string;
+  status: number;
+  approvals: number;
+};
+
+const ESCROW_PENDING = 0;
 
 export const AuditorDashboard: React.FC = () => {
+  const { contracts, refreshRole } = useWallet();
+  const [cases, setCases] = useState<EscrowRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState<Record<number, string>>({});
+
+  const fetchPending = useCallback(async () => {
+    if (!contracts.bankVault) return;
+    try {
+      const nextId = await contracts.bankVault.nextCaseId();
+      const list: EscrowRow[] = [];
+      for (let id = 1; id < Number(nextId); id++) {
+        const e = await contracts.bankVault.getEscrow(id);
+        const status = Number(e.status_ ?? e[3]);
+        list.push({
+          caseId: id,
+          from: e.from_ ?? e[0],
+          to: e.to_ ?? e[1],
+          amount: formatEther((e.amount_ ?? e[2]).toString()),
+          status,
+          approvals: Number(e.approvals_ ?? e[5]),
+        });
+      }
+      setCases(list.filter((c) => c.status === ESCROW_PENDING));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to fetch");
+    }
+  }, [contracts.bankVault]);
+
+  useEffect(() => {
+    fetchPending();
+    const t = setInterval(fetchPending, 5000);
+    return () => clearInterval(t);
+  }, [fetchPending]);
+
+  const tx = useCallback(
+    async (fn: () => Promise<unknown>) => {
+      setError(null);
+      setLoading(true);
+      try {
+        await fn();
+        await fetchPending();
+        await refreshRole();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchPending, refreshRole]
+  );
+
+  const onApprove = (caseId: number) => {
+    if (!contracts.bankVault) return;
+    tx(async () => {
+      const approveTx = await contracts.bankVault!.approveEscrow(caseId);
+      await approveTx.wait();
+    });
+  };
+
+  const onReject = (caseId: number) => {
+    if (!contracts.bankVault) return;
+    const reason = rejectReason[caseId] ?? "Rejected by auditor";
+    tx(async () => {
+      const rejectTx = await contracts.bankVault!.rejectEscrow(caseId, reason);
+      await rejectTx.wait();
+    });
+  };
+
   return (
     <div className="panel">
-      <h2>Auditor Console</h2>
+      <h2>审计员控制台</h2>
+      {error && <p className="error-msg">{error}</p>}
+      {loading && <p className="loading-msg">交易处理中…</p>}
+
       <section className="panel-section">
-        <h3>Pending Escrowed Transfers</h3>
+        <h3>待审批托管转账</h3>
         <table className="table">
           <thead>
             <tr>
               <th>Case ID</th>
               <th>From</th>
               <th>To</th>
-              <th>Amount</th>
-              <th>Reason</th>
+              <th>Amount (sUSD)</th>
               <th>Approvals</th>
-              <th>Actions</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
-            {mockCases.map((c) => (
+            {cases.length === 0 && (
+              <tr>
+                <td colSpan={6}>暂无待审批工单</td>
+              </tr>
+            )}
+            {cases.map((c) => (
               <tr key={c.caseId}>
                 <td>{c.caseId}</td>
-                <td>{c.from}</td>
-                <td>{c.to}</td>
-                <td>{c.amount.toLocaleString()} sUSD</td>
-                <td>{c.reason}</td>
+                <td title={c.from}>{c.from.slice(0, 6)}…{c.from.slice(-4)}</td>
+                <td title={c.to}>{c.to.slice(0, 6)}…{c.to.slice(-4)}</td>
+                <td>{c.amount}</td>
                 <td>{c.approvals}/2</td>
                 <td>
-                  <button>Approve</button>
-                  <button>Reject</button>
+                  <button onClick={() => onApprove(c.caseId)} disabled={loading}>批准</button>
+                  <input
+                    type="text"
+                    placeholder="拒绝原因"
+                    className="input-inline"
+                    value={rejectReason[c.caseId] ?? ""}
+                    onChange={(e) => setRejectReason((r) => ({ ...r, [c.caseId]: e.target.value }))}
+                  />
+                  <button onClick={() => onReject(c.caseId)} disabled={loading}>拒绝</button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        <p className="hint">
-          Approvals require at least 2 distinct auditors to release funds from escrow. Any auditor
-          can reject and roll funds back to the sender if AML red flags persist.
-        </p>
+        <p className="hint">需至少 2 名审计员批准后资金才会到账；任一审计员可拒绝并退回发起人。</p>
       </section>
     </div>
   );
 };
-

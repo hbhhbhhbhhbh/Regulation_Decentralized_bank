@@ -36,9 +36,11 @@ export interface BankVaultInterface extends Interface {
       | "blacklisted"
       | "dailyStats"
       | "deposit"
+      | "depositApyBps"
       | "forceLockAccount"
       | "freqStats"
       | "frequencyWindow"
+      | "getEscrow"
       | "getRoleAdmin"
       | "grantRole"
       | "hasRole"
@@ -58,6 +60,7 @@ export interface BankVaultInterface extends Interface {
       | "revokeRole"
       | "riskEngine"
       | "setBlacklist"
+      | "setDepositApyBps"
       | "setFrequencyParams"
       | "supportsInterface"
       | "token"
@@ -118,6 +121,10 @@ export interface BankVaultInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "depositApyBps",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "forceLockAccount",
     values: [AddressLike, BigNumberish, string]
   ): string;
@@ -128,6 +135,10 @@ export interface BankVaultInterface extends Interface {
   encodeFunctionData(
     functionFragment: "frequencyWindow",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getEscrow",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "getRoleAdmin",
@@ -197,6 +208,10 @@ export interface BankVaultInterface extends Interface {
     values: [AddressLike, boolean]
   ): string;
   encodeFunctionData(
+    functionFragment: "setDepositApyBps",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "setFrequencyParams",
     values: [BigNumberish, BigNumberish, BigNumberish]
   ): string;
@@ -242,6 +257,10 @@ export interface BankVaultInterface extends Interface {
   decodeFunctionResult(functionFragment: "dailyStats", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "deposit", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "depositApyBps",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "forceLockAccount",
     data: BytesLike
   ): Result;
@@ -250,6 +269,7 @@ export interface BankVaultInterface extends Interface {
     functionFragment: "frequencyWindow",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "getEscrow", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "getRoleAdmin",
     data: BytesLike
@@ -297,6 +317,10 @@ export interface BankVaultInterface extends Interface {
   decodeFunctionResult(functionFragment: "riskEngine", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "setBlacklist",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "setDepositApyBps",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -550,6 +574,8 @@ export interface BankVault extends BaseContract {
 
   deposit: TypedContractMethod<[amount: BigNumberish], [void], "nonpayable">;
 
+  depositApyBps: TypedContractMethod<[], [bigint], "view">;
+
   forceLockAccount: TypedContractMethod<
     [user: AddressLike, until: BigNumberish, reason: string],
     [void],
@@ -563,6 +589,21 @@ export interface BankVault extends BaseContract {
   >;
 
   frequencyWindow: TypedContractMethod<[], [bigint], "view">;
+
+  getEscrow: TypedContractMethod<
+    [caseId: BigNumberish],
+    [
+      [string, string, bigint, bigint, bigint, bigint] & {
+        from_: string;
+        to_: string;
+        amount_: bigint;
+        status_: bigint;
+        createdAt_: bigint;
+        approvals_: bigint;
+      }
+    ],
+    "view"
+  >;
 
   getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
 
@@ -634,6 +675,12 @@ export interface BankVault extends BaseContract {
     "nonpayable"
   >;
 
+  setDepositApyBps: TypedContractMethod<
+    [bps: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
   setFrequencyParams: TypedContractMethod<
     [windowSec: BigNumberish, maxCount: BigNumberish, lockSec: BigNumberish],
     [void],
@@ -699,6 +746,9 @@ export interface BankVault extends BaseContract {
     nameOrSignature: "deposit"
   ): TypedContractMethod<[amount: BigNumberish], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "depositApyBps"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "forceLockAccount"
   ): TypedContractMethod<
     [user: AddressLike, until: BigNumberish, reason: string],
@@ -715,6 +765,22 @@ export interface BankVault extends BaseContract {
   getFunction(
     nameOrSignature: "frequencyWindow"
   ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "getEscrow"
+  ): TypedContractMethod<
+    [caseId: BigNumberish],
+    [
+      [string, string, bigint, bigint, bigint, bigint] & {
+        from_: string;
+        to_: string;
+        amount_: bigint;
+        status_: bigint;
+        createdAt_: bigint;
+        approvals_: bigint;
+      }
+    ],
+    "view"
+  >;
   getFunction(
     nameOrSignature: "getRoleAdmin"
   ): TypedContractMethod<[role: BytesLike], [string], "view">;
@@ -796,6 +862,9 @@ export interface BankVault extends BaseContract {
     [void],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "setDepositApyBps"
+  ): TypedContractMethod<[bps: BigNumberish], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setFrequencyParams"
   ): TypedContractMethod<

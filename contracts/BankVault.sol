@@ -66,6 +66,9 @@ contract BankVault is AccessControl {
 
     bool public paused;
 
+    /// @dev 存款年化利率 (bps)，对外展示用；管理员可调
+    uint256 public depositApyBps = 200;
+
     event Deposited(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
     event ImmediateTransfer(address indexed from, address indexed to, uint256 amount);
@@ -242,6 +245,19 @@ contract BankVault is AccessControl {
         logContract.emitTransferRejected(caseId, msg.sender, reason);
     }
 
+    /// @dev 供审计员前端拉取托管单详情（含待审批列表）。
+    function getEscrow(uint256 caseId)
+        external
+        view
+        returns (address from_, address to_, uint256 amount_, EscrowStatus status_, uint256 createdAt_, uint256 approvals_)
+    {
+        if (caseId == 0 || caseId >= nextCaseId) {
+            return (address(0), address(0), 0, EscrowStatus.Rejected, 0, 0);
+        }
+        EscrowTransfer storage e = escrows[caseId];
+        return (e.from, e.to, e.amount, e.status, e.createdAt, e.approvals);
+    }
+
     function setBlacklist(address user, bool isBlacklisted_) external onlyAdmin {
         blacklisted[user] = isBlacklisted_;
         logContract.emitBlacklistUpdated(user, isBlacklisted_);
@@ -299,6 +315,10 @@ contract BankVault is AccessControl {
 
     function unpause() external onlyAdmin {
         paused = false;
+    }
+
+    function setDepositApyBps(uint256 bps) external onlyAdmin {
+        depositApyBps = bps;
     }
 }
 

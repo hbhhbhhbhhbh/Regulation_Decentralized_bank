@@ -174,6 +174,26 @@ project/
 
 ---
 
+## 4.4 部署后：哪些地址是哪些角色
+
+部署完成后，**只有部署时使用的那个地址**自动具备权限；其余角色需在管理员界面里配置。
+
+| 角色 | 部署后默认对应地址 | 说明 |
+|------|-------------------|------|
+| **管理员 Admin** | 部署账户（执行 `deploy.ts` 的 signer） | 本地节点下通常为 Hardhat 账户 #0，例如 `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`。同时拥有 KYC 官、风险官、sUSD 铸币权限。 |
+| **审计员 Auditor** | 无 | 需管理员在「管理员」页面输入某地址并点击「添加审计员」后，该地址才成为审计员。 |
+| **用户 User** | 无 | 需管理员在「管理员」页面：①「KYC 注册」里为该地址注册 KYC；②「风险初始化」里为该地址设置风险分与日限额。完成后该地址连接前端会显示「用户」界面。 |
+
+**本地测试常用账户（Hardhat 默认）：**
+
+- **#0** `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` → 部署者，即 **管理员**
+- **#1** `0x70997970C51812dc3A010C7d01b50e0d17dc79C8` → 可被设为审计员或用户
+- **#2** `0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC` → 可被设为用户
+
+前端按**当前连接的钱包地址**从链上读取角色，只展示该角色对应的一个界面（管理员 / 审计员 / 用户 / 未注册）。
+
+---
+
 ## 5. 系统运行 & 开发步骤
 
 ### 5.1 安装依赖
@@ -205,7 +225,7 @@ npx hardhat run scripts/deploy.ts --network localhost
 
 部署脚本会依次部署：
 
-- ERC20 Mock Token (`ERC20PresetMinterPauser`)：用于模拟 sUSD
+- ERC20 Mock Token (`MockStablecoin`)：用于模拟 sUSD
 - `IdentityRegistry`
 - `RiskEngine`
 - `ComplianceLog`
@@ -221,12 +241,10 @@ npx hardhat run scripts/deploy.ts --network localhost
 npm run dev
 ```
 
-然后在浏览器打开 Vite 提示的地址（通常为 `http://localhost:5173`），即可看到：
+然后在浏览器打开 Vite 提示的地址（通常为 `http://localhost:5173`）。连接钱包后：
 
-- 顶部角色切换：User / Auditor / Admin
-- 各角色对应的操作控制台和说明文案
-
-> 当前前端示例中部分数据为静态 Mock，用于先演示 UX。你可以按需接入 `ethers`，将其替换为真实链上数据调用。
+- 页面会按**当前地址的链上角色**只显示对应一个界面（管理员 / 审计员 / 用户 / 未注册）。
+- 各角色功能均通过合约调用完成，无静态假数据。
 
 ---
 
