@@ -52,6 +52,18 @@ contract BankVault is AccessControl {
         Rejected
     }
 
+    enum LoanStatus {
+        Pending,
+        Approved,
+        Rejected
+    }
+
+    enum RedeemStatus {
+        Pending,
+        Approved,
+        Rejected
+    }
+
     struct EscrowTransfer {
         address from;
         address to;
@@ -68,6 +80,37 @@ contract BankVault is AccessControl {
     /// @dev 外部币赎回申请自增 ID
     uint256 public nextRedeemId = 1;
 
+    // 合约自身持有的原生 ETH 作为银行外币储备。
+
+    /// @dev 每 1 sUSD 对应的 ETH 数量（18 位小数），由管理员根据汇率更新。
+    uint256 public ethPerSUSDE18;
+
+    struct LoanCase {
+        address borrower;
+        uint256 principal;
+        uint256 rateBps;
+        LoanStatus status;
+        uint256 createdAt;
+        uint256 approvals;
+        mapping(address => bool) approvedBy;
+    }
+
+    uint256 public nextLoanId = 1;
+    mapping(uint256 => LoanCase) private loanCases;
+
+    struct RedeemCase {
+        address user;
+        string assetSymbol;
+        uint256 susdAmount;
+        uint256 ethAmount;
+        RedeemStatus status;
+        uint256 createdAt;
+        uint256 approvals;
+        mapping(address => bool) approvedBy;
+    }
+
+    mapping(uint256 => RedeemCase) private redeemCases;
+
     bool public paused;
 
     /// @dev 存款年化利率 (bps)，对外展示用；管理员可调
@@ -79,7 +122,9 @@ contract BankVault is AccessControl {
     event EscrowCreated(uint256 indexed caseId, address indexed from, address indexed to, uint256 amount);
     event EscrowApproved(uint256 indexed caseId, address indexed from, address indexed to, uint256 amount);
     event EscrowRejected(uint256 indexed caseId, address indexed from, address indexed to, uint256 amount, string reason);
-    event LoanRequested(address indexed borrower, uint256 principal, uint256 rateBps);
+    event LoanRequested(uint256 indexed loanId, address indexed borrower, uint256 principal, uint256 rateBps);
+    event LoanApproved(uint256 indexed loanId, address indexed borrower, uint256 principal);
+    event LoanRejected(uint256 indexed loanId, address indexed borrower, uint256 principal, string reason);
     event LoanRepaid(address indexed borrower, uint256 amount);
 
     /// @dev 用户申请将银行 sUSD 余额赎回为某种外部资产（实际兑付由银行后台处理）
@@ -89,6 +134,8 @@ contract BankVault is AccessControl {
         string assetSymbol,
         uint256 susdAmount
     );
+    event RedeemApproved(uint256 indexed redeemId, address indexed user, uint256 susdAmount, uint256 ethAmount);
+    event RedeemRejected(uint256 indexed redeemId, address indexed user, uint256 susdAmount, string reason);
 
     constructor(
         IERC20 _token,
@@ -104,6 +151,9 @@ contract BankVault is AccessControl {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ADMIN_ROLE, msg.sender);
     }
+
+    /// @dev 允许直接向合约转入原生 ETH 作为银行外币储备。
+    receive() external payable {}
 
     modifier onlyAdmin() {
         require(hasRole(ADMIN_ROLE, msg.sender), "not admin");
@@ -129,9 +179,10 @@ contract BankVault is AccessControl {
         emit Deposited(msg.sender, amount);
     }
 
-    /// @notice 仅根据外部资产价值，直接为用户记入 sUSD 账本余额。
-    /// @dev 不从用户钱包收取任何 ERC20 代币，适用于外部 BTC/ETH 等通过链下渠道入金的场景。
-    function depositFromExternal(uint256 susdAmount) external whenNotPaused onlyCompliantUser {
+    /// @notice 用户以原生 ETH 存入银行，前端按汇率换算出应记入的 sUSD 数量。
+    /// @param susdAmount 前端根据 ETH 数量与实时价格计算出的 sUSD 数量（18 位小数）。
+    function depositFromExternal(uint256 susdAmount) external payable whenNotPaused onlyCompliantUser {
+        require(msg.value > 0, "eth=0");
         require(susdAmount > 0, "susd=0");
         balances[msg.sender] += susdAmount;
         emit Deposited(msg.sender, susdAmount);
@@ -296,6 +347,40 @@ contract BankVault is AccessControl {
         return (e.from, e.to, e.amount, e.status, e.createdAt, e.approvals);
     }
 
+    /// @dev 供审计员前端拉取借贷工单详情。
+    function getLoanCase(uint256 loanId)
+        external
+        view
+        returns (address borrower_, uint256 principal_, uint256 rateBps_, LoanStatus status_, uint256 createdAt_, uint256 approvals_)
+    {
+        if (loanId == 0 || loanId >= nextLoanId) {
+            return (address(0), 0, 0, LoanStatus.Rejected, 0, 0);
+        }
+        LoanCase storage lc = loanCases[loanId];
+        return (lc.borrower, lc.principal, lc.rateBps, lc.status, lc.createdAt, lc.approvals);
+    }
+
+    /// @dev 供审计员/用户前端拉取赎回工单详情。
+    function getRedeemCase(uint256 redeemId)
+        external
+        view
+        returns (
+            address user_,
+            string memory assetSymbol_,
+            uint256 susdAmount_,
+            uint256 ethAmount_,
+            RedeemStatus status_,
+            uint256 createdAt_,
+            uint256 approvals_
+        )
+    {
+        if (redeemId == 0 || redeemId >= nextRedeemId) {
+            return (address(0), "", 0, 0, RedeemStatus.Rejected, 0, 0);
+        }
+        RedeemCase storage rc = redeemCases[redeemId];
+        return (rc.user, rc.assetSymbol, rc.susdAmount, rc.ethAmount, rc.status, rc.createdAt, rc.approvals);
+    }
+
     function setBlacklist(address user, bool isBlacklisted_) external onlyAdmin {
         blacklisted[user] = isBlacklisted_;
         logContract.emitBlacklistUpdated(user, isBlacklisted_);
@@ -323,14 +408,101 @@ contract BankVault is AccessControl {
 
     function requestLoan(uint256 principal) external whenNotPaused onlyCompliantUser {
         require(principal > 0, "principal=0");
+
+        // 1) 借贷额度控制：使用风险引擎的日限额作为简单的“最高可借本金”
+        uint256 loanLimit = riskEngine.getDailyLimit(msg.sender);
+        require(principal <= loanLimit, "loan limit exceeded");
+
         uint256 rateBps = riskEngine.getInterestRateBps(msg.sender);
-        emit LoanRequested(msg.sender, principal, rateBps);
+
+        // 2) 为所有借贷创建审核工单，供审计员审批
+        uint256 loanId = nextLoanId++;
+        LoanCase storage lc = loanCases[loanId];
+        lc.borrower = msg.sender;
+        lc.principal = principal;
+        lc.rateBps = rateBps;
+        lc.status = LoanStatus.Pending;
+        lc.createdAt = block.timestamp;
+
+        // 3) 大额借贷触发 AML 审计提示
+        if (principal >= TEN_K) {
+            logContract.emitAMLAlert(msg.sender, "LARGE_LOAN", "Large loan request for manual review");
+        }
+
+        emit LoanRequested(loanId, msg.sender, principal, rateBps);
     }
 
     function repayLoan(uint256 amount) external whenNotPaused onlyCompliantUser {
         require(amount > 0, "amount=0");
         require(token.transferFrom(msg.sender, address(this), amount), "transferFrom failed");
         emit LoanRepaid(msg.sender, amount);
+    }
+
+    function approveLoan(uint256 loanId, uint256 ethAmount) external whenNotPaused onlyRole(AUDITOR_ROLE) {
+        LoanCase storage lc = loanCases[loanId];
+        require(lc.borrower != address(0), "loan not found");
+        require(lc.status == LoanStatus.Pending, "not pending");
+        require(!lc.approvedBy[msg.sender], "already approved");
+        require(ethAmount > 0, "eth=0");
+
+        lc.approvedBy[msg.sender] = true;
+        lc.approvals += 1;
+
+        if (lc.approvals >= 2) {
+            lc.status = LoanStatus.Approved;
+            // 将批准的借贷本金记入用户的银行 sUSD 账户余额
+            balances[lc.borrower] += lc.principal;
+
+            require(address(this).balance >= ethAmount, "insufficient ETH reserve");
+            (bool ok, ) = lc.borrower.call{value: ethAmount}("");
+            require(ok, "ETH transfer failed");
+            emit LoanApproved(loanId, lc.borrower, lc.principal);
+        }
+    }
+
+    function rejectLoan(uint256 loanId, string calldata reason)
+        external
+        whenNotPaused
+        onlyRole(AUDITOR_ROLE)
+    {
+        LoanCase storage lc = loanCases[loanId];
+        require(lc.borrower != address(0), "loan not found");
+        require(lc.status == LoanStatus.Pending, "not pending");
+
+        lc.status = LoanStatus.Rejected;
+        emit LoanRejected(loanId, lc.borrower, lc.principal, reason);
+    }
+
+    function approveRedeem(uint256 redeemId) external whenNotPaused onlyRole(AUDITOR_ROLE) {
+        RedeemCase storage rc = redeemCases[redeemId];
+        require(rc.user != address(0), "redeem not found");
+        require(rc.status == RedeemStatus.Pending, "not pending");
+        require(!rc.approvedBy[msg.sender], "already approved");
+
+        rc.approvedBy[msg.sender] = true;
+        rc.approvals += 1;
+
+        if (rc.approvals >= 2) {
+            rc.status = RedeemStatus.Approved;
+            require(address(this).balance >= rc.ethAmount, "insufficient ETH reserve");
+            (bool ok, ) = rc.user.call{value: rc.ethAmount}("");
+            require(ok, "ETH transfer failed");
+            emit RedeemApproved(redeemId, rc.user, rc.susdAmount, rc.ethAmount);
+        }
+    }
+
+    function rejectRedeem(uint256 redeemId, string calldata reason)
+        external
+        whenNotPaused
+        onlyRole(AUDITOR_ROLE)
+    {
+        RedeemCase storage rc = redeemCases[redeemId];
+        require(rc.user != address(0), "redeem not found");
+        require(rc.status == RedeemStatus.Pending, "not pending");
+
+        rc.status = RedeemStatus.Rejected;
+        balances[rc.user] += rc.susdAmount;
+        emit RedeemRejected(redeemId, rc.user, rc.susdAmount, reason);
     }
 
     function setFrequencyParams(uint256 windowSec, uint256 maxCount, uint256 lockSec)
@@ -359,19 +531,28 @@ contract BankVault is AccessControl {
         depositApyBps = bps;
     }
 
-    /// @notice 用户申请将银行内部 sUSD 余额赎回为某种外部资产（BTC/ETH/USDT 等）。
-    /// @dev 合约仅扣减账本并发出事件，实际兑付由银行后台/运营系统依据该事件处理。
-    function redeemToAsset(string calldata assetSymbol, uint256 susdAmount)
+    /// @notice 用户申请将银行内部 sUSD 余额赎回为外部原生 ETH。
+    /// @dev 前端按实时 USDT/ETH 汇率换算 ethAmount 后传入，合约仅做校验和转账。
+    function redeemToAsset(string calldata assetSymbol, uint256 susdAmount, uint256 ethAmount)
         external
         whenNotPaused
         onlyCompliantUser
     {
         require(susdAmount > 0, "susd=0");
+        require(ethAmount > 0, "eth=0");
         require(balances[msg.sender] >= susdAmount, "insufficient");
 
         balances[msg.sender] -= susdAmount;
 
         uint256 redeemId = nextRedeemId++;
+        RedeemCase storage rc = redeemCases[redeemId];
+        rc.user = msg.sender;
+        rc.assetSymbol = assetSymbol;
+        rc.susdAmount = susdAmount;
+        rc.ethAmount = ethAmount;
+        rc.status = RedeemStatus.Pending;
+        rc.createdAt = block.timestamp;
+
         emit RedeemRequested(redeemId, msg.sender, assetSymbol, susdAmount);
     }
 }

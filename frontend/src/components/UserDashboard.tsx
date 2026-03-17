@@ -12,6 +12,7 @@ export const UserDashboard: React.FC = () => {
   const [dailyLimit, setDailyLimit] = useState<string>("0");
   const [dailySpent, setDailySpent] = useState<string>("0");
   const [dailyRemaining, setDailyRemaining] = useState<string>("0");
+  const [loanLimit, setLoanLimit] = useState<string>("0");
   const [interestBps, setInterestBps] = useState<number>(0);
   const [lockedUntil, setLockedUntil] = useState<bigint>(0n);
   const [loading, setLoading] = useState(false);
@@ -23,13 +24,14 @@ export const UserDashboard: React.FC = () => {
   const [loanAmount, setLoanAmount] = useState("");
   const [faucetAmount, setFaucetAmount] = useState("10000");
 
-  const [assetSymbol, setAssetSymbol] = useState("USDT");
+  // 外币兑换统一使用 ETH
+  const [assetSymbol, setAssetSymbol] = useState("ETH");
   const [assetAmount, setAssetAmount] = useState("");
-  const [redeemAssetSymbol, setRedeemAssetSymbol] = useState("USDT");
-  const [redeemSusdAmount, setRedeemSusdAmount] = useState("");
+  const [redeemAssetSymbol, setRedeemAssetSymbol] = useState("ETH");
+  const [redeemEthAmount, setRedeemEthAmount] = useState("");
 
   const mainAssets = useMemo(
-    () => assetPricesUSD.filter((a) => ["BTC", "ETH", "USDT", "BNB", "SOL", "XRP", "ADA", "DOGE", "LTC"].includes(a.symbol)),
+    () => assetPricesUSD.filter((a) => a.symbol === "ETH"),
     [assetPricesUSD]
   );
 
@@ -37,6 +39,18 @@ export const UserDashboard: React.FC = () => {
   const expectedSUSD =
     selectedAsset && assetAmount
       ? Number(assetAmount) * (selectedAsset.priceUSD || 0)
+      : 0;
+  const expectedRedeemSUSD =
+    selectedAsset && redeemEthAmount
+      ? Number(redeemEthAmount) * (selectedAsset.priceUSD || 0)
+      : 0;
+  const expectedLoanSUSD =
+    selectedAsset && loanAmount
+      ? Number(loanAmount) * (selectedAsset.priceUSD || 0)
+      : 0;
+  const loanLimitETH =
+    selectedAsset && selectedAsset.priceUSD > 0
+      ? Number(loanLimit || "0") / selectedAsset.priceUSD
       : 0;
 
   type TxKind = "deposit" | "asset_deposit" | "transfer" | "loan" | "redeem";
@@ -68,6 +82,7 @@ export const UserDashboard: React.FC = () => {
       setTokenBalance(formatEther(tok));
       setRiskScore(Number(score));
       setDailyLimit(formatEther(limit));
+      setLoanLimit(formatEther(limit));
       setInterestBps(Number(bps));
       setLockedUntil(locked);
 
@@ -133,10 +148,15 @@ export const UserDashboard: React.FC = () => {
   };
 
   const onRequestLoan = () => {
-    const amt = loanAmount.trim();
-    if (!amt || !contracts.bankVault) return;
+    const ethStr = loanAmount.trim();
+    if (!ethStr || !contracts.bankVault || !selectedAsset) return;
+    const ethNum = Number(ethStr);
+    const price = selectedAsset.priceUSD || 0;
+    if (!ethNum || ethNum <= 0 || !price) return;
+    const susdNum = ethNum * price;
+    const susdWei = parseEther(susdNum.toString());
     tx(async () => {
-      const loanTx = await contracts.bankVault!.requestLoan(parseEther(amt));
+      const loanTx = await contracts.bankVault!.requestLoan(susdWei);
       await loanTx.wait();
     }, "Request Loan");
   };
@@ -156,11 +176,13 @@ export const UserDashboard: React.FC = () => {
     if (!amtStr) return;
     const assetNum = Number(amtStr);
     if (!assetNum || assetNum <= 0) return;
-    const susdNum = assetNum * selectedAsset.priceUSD;
-    const wei = parseEther(susdNum.toString());
+    // 用户输入的是 ETH 数量：用它作为 msg.value，同时按价格换算应记入的 sUSD 数量
+    const ethWei = parseEther(amtStr);
+    const susdNum = assetNum * (selectedAsset.priceUSD || 0);
+    const susdWei = parseEther(susdNum.toString());
     tx(
       async () => {
-        const txReq = await contracts.bankVault!.depositFromExternal(wei);
+        const txReq = await contracts.bankVault!.depositFromExternal(susdWei, { value: ethWei });
         await txReq.wait();
       },
       "MultiAssetDeposit"
@@ -168,12 +190,19 @@ export const UserDashboard: React.FC = () => {
   };
 
   const onRedeem = () => {
-    const amt = redeemSusdAmount.trim();
-    if (!amt || !contracts.bankVault) return;
-    const wei = parseEther(amt);
+    const ethStr = redeemEthAmount.trim();
+    if (!ethStr || !contracts.bankVault || !selectedAsset) return;
+    const ethNum = Number(ethStr);
+    const price = selectedAsset.priceUSD || 0;
+    if (!ethNum || ethNum <= 0 || !price) return;
+
+    // 输入单位为 ETH，前端按实时价格换算对应的 sUSD 账本扣减额
+    const susdNum = ethNum * price;
+    const susdWei = parseEther(susdNum.toString());
+    const ethWei = parseEther(ethStr);
     tx(
       async () => {
-        const txReq = await contracts.bankVault!.redeemToAsset(redeemAssetSymbol, wei);
+        const txReq = await contracts.bankVault!.redeemToAsset(redeemAssetSymbol, susdWei, ethWei);
         await txReq.wait();
       },
       "Redeem"
@@ -219,7 +248,7 @@ export const UserDashboard: React.FC = () => {
 
       const txs: UserTx[] = [];
 
-      for (const ev of depositEvents) {
+      for (const ev of depositEvents as any[]) {
         const user = (ev.args?.[0] as string | undefined)?.toLowerCase();
         if (user !== currentAddress) continue;
         const ts = await getTimestamp(ev.blockNumber);
@@ -233,7 +262,7 @@ export const UserDashboard: React.FC = () => {
         });
       }
 
-      for (const ev of transferEvents) {
+      for (const ev of transferEvents as any[]) {
         const from = (ev.args?.[0] as string | undefined) ?? "";
         const to = (ev.args?.[1] as string | undefined) ?? "";
         const amount = ev.args?.[2];
@@ -249,7 +278,7 @@ export const UserDashboard: React.FC = () => {
         });
       }
 
-      for (const ev of escrowEvents) {
+      for (const ev of escrowEvents as any[]) {
         const caseId = ev.args?.[0];
         const from = (ev.args?.[1] as string | undefined) ?? "";
         const to = (ev.args?.[2] as string | undefined) ?? "";
@@ -271,21 +300,30 @@ export const UserDashboard: React.FC = () => {
         });
       }
 
-      for (const ev of loanReqEvents) {
-        const user = (ev.args?.[0] as string | undefined)?.toLowerCase();
-        if (user !== currentAddress) continue;
+      for (const ev of loanReqEvents as any[]) {
+        const loanId = ev.args?.[0];
+        const borrower = (ev.args?.[1] as string | undefined)?.toLowerCase();
+        if (borrower !== currentAddress) continue;
         const ts = await getTimestamp(ev.blockNumber);
-        const principal = ev.args?.[1];
+        const principal = ev.args?.[2];
+        const principalSUSD = Number(formatEther(principal));
+        const ethPrice = selectedAsset?.priceUSD || 0;
+        const approxEth = ethPrice > 0 ? principalSUSD / ethPrice : 0;
+        const loanCase = await vault.getLoanCase(loanId);
+        const statusVal = Number(loanCase.status_ ?? loanCase[3]);
+        let status: TxStatus = "待审计";
+        if (statusVal === 1) status = "成功";
+        if (statusVal === 2) status = "失败";
         txs.push({
           id: ev.transactionHash + "_loan_req",
           kind: "loan",
           timestamp: ts,
-          summary: `申请借贷 本金 ${formatEther(principal)} sUSD（待审计）`,
-          status: "待审计",
+          summary: `申请借贷 ${approxEth > 0 ? approxEth.toFixed(6) : "—"} ETH（Loan #${loanId.toString()}）`,
+          status,
         });
       }
 
-      for (const ev of loanRepayEvents) {
+      for (const ev of loanRepayEvents as any[]) {
         const user = (ev.args?.[0] as string | undefined)?.toLowerCase();
         if (user !== currentAddress) continue;
         const ts = await getTimestamp(ev.blockNumber);
@@ -299,18 +337,24 @@ export const UserDashboard: React.FC = () => {
         });
       }
 
-      for (const ev of redeemEvents) {
+      for (const ev of redeemEvents as any[]) {
+        const redeemId = ev.args?.[0];
         const user = (ev.args?.[1] as string | undefined)?.toLowerCase();
         if (user !== currentAddress) continue;
         const ts = await getTimestamp(ev.blockNumber);
         const assetSym = ev.args?.[2] as string;
         const susdAmt = ev.args?.[3];
+        const redeemCase = await vault.getRedeemCase(redeemId);
+        const statusVal = Number(redeemCase.status_ ?? redeemCase[4]);
+        let status: TxStatus = "待审计";
+        if (statusVal === 1) status = "成功";
+        if (statusVal === 2) status = "失败";
         txs.push({
           id: ev.transactionHash + "_redeem",
           kind: "redeem",
           timestamp: ts,
-          summary: `申请赎回 ${formatEther(susdAmt)} sUSD 为 ${assetSym}`,
-          status: "待审计",
+          summary: `申请赎回 ${formatEther(susdAmt)} sUSD 为 ${assetSym}（Redeem #${redeemId.toString()}）`,
+          status,
         });
       }
       txs.sort((a, b) => b.timestamp - a.timestamp);
@@ -318,7 +362,7 @@ export const UserDashboard: React.FC = () => {
     } catch (e) {
       // 静默失败，不阻塞主数据
     }
-  }, [address, contracts.bankVault]);
+  }, [address, contracts.bankVault, selectedAsset]);
 
   useEffect(() => {
     fetchUserTxs();
@@ -366,6 +410,7 @@ export const UserDashboard: React.FC = () => {
             <p>日转出限额: <strong>{dailyLimit}</strong> sUSD</p>
             <p>今日已用额度: <strong>{dailySpent}</strong> sUSD</p>
             <p>今日剩余额度: <strong>{dailyRemaining}</strong> sUSD</p>
+            <p>借贷额度上限: <strong>{loanLimitETH.toLocaleString(undefined, { maximumFractionDigits: 6 })}</strong> ETH</p>
             <p>当前借贷年化 (bps): <strong>{interestBps}</strong> → 约 {(interestBps / 100).toFixed(2)}%</p>
           </section>
 
@@ -382,20 +427,16 @@ export const UserDashboard: React.FC = () => {
               <button onClick={onDeposit} disabled={loading}>存入银行账户</button>
             </div>
             <div className="form-row">
-              <label>多资产存入（外部 BTC/ETH → 银行 sUSD）</label>
-              <select
-                value={assetSymbol}
-                onChange={(e) => setAssetSymbol(e.target.value)}
-              >
-                {mainAssets.map((a) => (
-                  <option key={a.symbol} value={a.symbol}>
-                    {a.symbol}
-                  </option>
-                ))}
-              </select>
+              <label>外币存入（仅支持 ETH → 银行 sUSD）</label>
               <input
                 type="text"
-                placeholder="资产数量 (BTC/ETH/USDT...)"
+                readOnly
+                className="input-inline"
+                value="ETH"
+              />
+              <input
+                type="text"
+                placeholder="ETH 数量"
                 value={assetAmount}
                 onChange={(e) => setAssetAmount(e.target.value)}
               />
@@ -410,25 +451,26 @@ export const UserDashboard: React.FC = () => {
               </p>
             )}
             <div className="form-row">
-              <label>赎回（银行 sUSD → 外部资产）</label>
-              <select
-                value={redeemAssetSymbol}
-                onChange={(e) => setRedeemAssetSymbol(e.target.value)}
-              >
-                {mainAssets.map((a) => (
-                  <option key={a.symbol} value={a.symbol}>
-                    {a.symbol}
-                  </option>
-                ))}
-              </select>
+              <label>赎回（银行 sUSD → ETH）</label>
               <input
                 type="text"
-                placeholder="使用的 sUSD 数量"
-                value={redeemSusdAmount}
-                onChange={(e) => setRedeemSusdAmount(e.target.value)}
+                readOnly
+                className="input-inline"
+                value="ETH"
+              />
+              <input
+                type="text"
+                placeholder="ETH 数量"
+                value={redeemEthAmount}
+                onChange={(e) => setRedeemEthAmount(e.target.value)}
               />
               <button onClick={onRedeem} disabled={loading}>申请赎回</button>
             </div>
+            {selectedAsset && !!expectedRedeemSUSD && (
+              <p className="hint">
+                本次赎回将扣减约 <strong>{expectedRedeemSUSD.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> sUSD
+              </p>
+            )}
             <div className="form-row">
               <label>转账（平台内）</label>
               <input
@@ -446,15 +488,20 @@ export const UserDashboard: React.FC = () => {
               <button onClick={onTransfer} disabled={loading}>转账</button>
             </div>
             <div className="form-row">
-              <label>申请借贷</label>
+              <label>申请借贷（ETH）</label>
               <input
                 type="text"
-                placeholder="本金数量"
+                placeholder="借贷 ETH 数量"
                 value={loanAmount}
                 onChange={(e) => setLoanAmount(e.target.value)}
               />
               <button onClick={onRequestLoan} disabled={loading}>申请借贷</button>
             </div>
+            {selectedAsset && !!expectedLoanSUSD && (
+              <p className="hint">
+                本次借贷约折合 <strong>{expectedLoanSUSD.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> sUSD（用于额度校验）
+              </p>
+            )}
             <div className="form-row">
               <label>领水 (sUSD)</label>
               <input

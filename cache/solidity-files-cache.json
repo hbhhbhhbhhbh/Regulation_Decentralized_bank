@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "D:\\poly\\Fintech Regulation\\project\\contracts\\BankVault.sol": {
-      "lastModificationDate": 1773740516686,
-      "contentHash": "e525cf9171c1dc6fc1ee46da515ce191",
+      "lastModificationDate": 1773745047745,
+      "contentHash": "5e27e4b32b1d504cbeb0392c75cd4da8",
       "sourceName": "contracts/BankVault.sol",
       "solcConfig": {
         "version": "0.8.20",

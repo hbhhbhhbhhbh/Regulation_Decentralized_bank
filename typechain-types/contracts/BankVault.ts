@@ -32,16 +32,21 @@ export interface BankVaultInterface extends Interface {
       | "TEN_K"
       | "addAuditor"
       | "approveEscrow"
+      | "approveLoan"
+      | "approveRedeem"
       | "balances"
       | "blacklisted"
       | "dailyStats"
       | "deposit"
       | "depositApyBps"
       | "depositFromExternal"
+      | "ethPerSUSDE18"
       | "forceLockAccount"
       | "freqStats"
       | "frequencyWindow"
       | "getEscrow"
+      | "getLoanCase"
+      | "getRedeemCase"
       | "getRoleAdmin"
       | "grantRole"
       | "hasRole"
@@ -51,11 +56,14 @@ export interface BankVaultInterface extends Interface {
       | "logContract"
       | "maxTxPerWindow"
       | "nextCaseId"
+      | "nextLoanId"
       | "nextRedeemId"
       | "pause"
       | "paused"
       | "redeemToAsset"
       | "rejectEscrow"
+      | "rejectLoan"
+      | "rejectRedeem"
       | "removeAuditor"
       | "renounceRole"
       | "repayLoan"
@@ -80,8 +88,12 @@ export interface BankVaultInterface extends Interface {
       | "EscrowCreated"
       | "EscrowRejected"
       | "ImmediateTransfer"
+      | "LoanApproved"
+      | "LoanRejected"
       | "LoanRepaid"
       | "LoanRequested"
+      | "RedeemApproved"
+      | "RedeemRejected"
       | "RedeemRequested"
       | "RoleAdminChanged"
       | "RoleGranted"
@@ -111,6 +123,14 @@ export interface BankVaultInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "approveLoan",
+    values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "approveRedeem",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "balances",
     values: [AddressLike]
   ): string;
@@ -135,6 +155,10 @@ export interface BankVaultInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "ethPerSUSDE18",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "forceLockAccount",
     values: [AddressLike, BigNumberish, string]
   ): string;
@@ -148,6 +172,14 @@ export interface BankVaultInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "getEscrow",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getLoanCase",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getRedeemCase",
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
@@ -184,6 +216,10 @@ export interface BankVaultInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "nextLoanId",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "nextRedeemId",
     values?: undefined
   ): string;
@@ -191,10 +227,18 @@ export interface BankVaultInterface extends Interface {
   encodeFunctionData(functionFragment: "paused", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "redeemToAsset",
-    values: [string, BigNumberish]
+    values: [string, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "rejectEscrow",
+    values: [BigNumberish, string]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "rejectLoan",
+    values: [BigNumberish, string]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "rejectRedeem",
     values: [BigNumberish, string]
   ): string;
   encodeFunctionData(
@@ -267,6 +311,14 @@ export interface BankVaultInterface extends Interface {
     functionFragment: "approveEscrow",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "approveLoan",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "approveRedeem",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "balances", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "blacklisted",
@@ -283,6 +335,10 @@ export interface BankVaultInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "ethPerSUSDE18",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "forceLockAccount",
     data: BytesLike
   ): Result;
@@ -292,6 +348,14 @@ export interface BankVaultInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "getEscrow", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "getLoanCase",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getRedeemCase",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "getRoleAdmin",
     data: BytesLike
@@ -316,6 +380,7 @@ export interface BankVaultInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "nextCaseId", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "nextLoanId", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "nextRedeemId",
     data: BytesLike
@@ -328,6 +393,11 @@ export interface BankVaultInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "rejectEscrow",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "rejectLoan", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "rejectRedeem",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -480,6 +550,53 @@ export namespace ImmediateTransferEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace LoanApprovedEvent {
+  export type InputTuple = [
+    loanId: BigNumberish,
+    borrower: AddressLike,
+    principal: BigNumberish
+  ];
+  export type OutputTuple = [
+    loanId: bigint,
+    borrower: string,
+    principal: bigint
+  ];
+  export interface OutputObject {
+    loanId: bigint;
+    borrower: string;
+    principal: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace LoanRejectedEvent {
+  export type InputTuple = [
+    loanId: BigNumberish,
+    borrower: AddressLike,
+    principal: BigNumberish,
+    reason: string
+  ];
+  export type OutputTuple = [
+    loanId: bigint,
+    borrower: string,
+    principal: bigint,
+    reason: string
+  ];
+  export interface OutputObject {
+    loanId: bigint;
+    borrower: string;
+    principal: bigint;
+    reason: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace LoanRepaidEvent {
   export type InputTuple = [borrower: AddressLike, amount: BigNumberish];
   export type OutputTuple = [borrower: string, amount: bigint];
@@ -495,19 +612,72 @@ export namespace LoanRepaidEvent {
 
 export namespace LoanRequestedEvent {
   export type InputTuple = [
+    loanId: BigNumberish,
     borrower: AddressLike,
     principal: BigNumberish,
     rateBps: BigNumberish
   ];
   export type OutputTuple = [
+    loanId: bigint,
     borrower: string,
     principal: bigint,
     rateBps: bigint
   ];
   export interface OutputObject {
+    loanId: bigint;
     borrower: string;
     principal: bigint;
     rateBps: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace RedeemApprovedEvent {
+  export type InputTuple = [
+    redeemId: BigNumberish,
+    user: AddressLike,
+    susdAmount: BigNumberish,
+    ethAmount: BigNumberish
+  ];
+  export type OutputTuple = [
+    redeemId: bigint,
+    user: string,
+    susdAmount: bigint,
+    ethAmount: bigint
+  ];
+  export interface OutputObject {
+    redeemId: bigint;
+    user: string;
+    susdAmount: bigint;
+    ethAmount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace RedeemRejectedEvent {
+  export type InputTuple = [
+    redeemId: BigNumberish,
+    user: AddressLike,
+    susdAmount: BigNumberish,
+    reason: string
+  ];
+  export type OutputTuple = [
+    redeemId: bigint,
+    user: string,
+    susdAmount: bigint,
+    reason: string
+  ];
+  export interface OutputObject {
+    redeemId: bigint;
+    user: string;
+    susdAmount: bigint;
+    reason: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -670,6 +840,18 @@ export interface BankVault extends BaseContract {
     "nonpayable"
   >;
 
+  approveLoan: TypedContractMethod<
+    [loanId: BigNumberish, ethAmount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  approveRedeem: TypedContractMethod<
+    [redeemId: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
   balances: TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
 
   blacklisted: TypedContractMethod<[arg0: AddressLike], [boolean], "view">;
@@ -687,8 +869,10 @@ export interface BankVault extends BaseContract {
   depositFromExternal: TypedContractMethod<
     [susdAmount: BigNumberish],
     [void],
-    "nonpayable"
+    "payable"
   >;
+
+  ethPerSUSDE18: TypedContractMethod<[], [bigint], "view">;
 
   forceLockAccount: TypedContractMethod<
     [user: AddressLike, until: BigNumberish, reason: string],
@@ -711,6 +895,37 @@ export interface BankVault extends BaseContract {
         from_: string;
         to_: string;
         amount_: bigint;
+        status_: bigint;
+        createdAt_: bigint;
+        approvals_: bigint;
+      }
+    ],
+    "view"
+  >;
+
+  getLoanCase: TypedContractMethod<
+    [loanId: BigNumberish],
+    [
+      [string, bigint, bigint, bigint, bigint, bigint] & {
+        borrower_: string;
+        principal_: bigint;
+        rateBps_: bigint;
+        status_: bigint;
+        createdAt_: bigint;
+        approvals_: bigint;
+      }
+    ],
+    "view"
+  >;
+
+  getRedeemCase: TypedContractMethod<
+    [redeemId: BigNumberish],
+    [
+      [string, string, bigint, bigint, bigint, bigint, bigint] & {
+        user_: string;
+        assetSymbol_: string;
+        susdAmount_: bigint;
+        ethAmount_: bigint;
         status_: bigint;
         createdAt_: bigint;
         approvals_: bigint;
@@ -745,6 +960,8 @@ export interface BankVault extends BaseContract {
 
   nextCaseId: TypedContractMethod<[], [bigint], "view">;
 
+  nextLoanId: TypedContractMethod<[], [bigint], "view">;
+
   nextRedeemId: TypedContractMethod<[], [bigint], "view">;
 
   pause: TypedContractMethod<[], [void], "nonpayable">;
@@ -752,13 +969,25 @@ export interface BankVault extends BaseContract {
   paused: TypedContractMethod<[], [boolean], "view">;
 
   redeemToAsset: TypedContractMethod<
-    [assetSymbol: string, susdAmount: BigNumberish],
+    [assetSymbol: string, susdAmount: BigNumberish, ethAmount: BigNumberish],
     [void],
     "nonpayable"
   >;
 
   rejectEscrow: TypedContractMethod<
     [caseId: BigNumberish, reason: string],
+    [void],
+    "nonpayable"
+  >;
+
+  rejectLoan: TypedContractMethod<
+    [loanId: BigNumberish, reason: string],
+    [void],
+    "nonpayable"
+  >;
+
+  rejectRedeem: TypedContractMethod<
+    [redeemId: BigNumberish, reason: string],
     [void],
     "nonpayable"
   >;
@@ -852,6 +1081,16 @@ export interface BankVault extends BaseContract {
     nameOrSignature: "approveEscrow"
   ): TypedContractMethod<[caseId: BigNumberish], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "approveLoan"
+  ): TypedContractMethod<
+    [loanId: BigNumberish, ethAmount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "approveRedeem"
+  ): TypedContractMethod<[redeemId: BigNumberish], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "balances"
   ): TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
   getFunction(
@@ -872,7 +1111,10 @@ export interface BankVault extends BaseContract {
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "depositFromExternal"
-  ): TypedContractMethod<[susdAmount: BigNumberish], [void], "nonpayable">;
+  ): TypedContractMethod<[susdAmount: BigNumberish], [void], "payable">;
+  getFunction(
+    nameOrSignature: "ethPerSUSDE18"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "forceLockAccount"
   ): TypedContractMethod<
@@ -899,6 +1141,39 @@ export interface BankVault extends BaseContract {
         from_: string;
         to_: string;
         amount_: bigint;
+        status_: bigint;
+        createdAt_: bigint;
+        approvals_: bigint;
+      }
+    ],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "getLoanCase"
+  ): TypedContractMethod<
+    [loanId: BigNumberish],
+    [
+      [string, bigint, bigint, bigint, bigint, bigint] & {
+        borrower_: string;
+        principal_: bigint;
+        rateBps_: bigint;
+        status_: bigint;
+        createdAt_: bigint;
+        approvals_: bigint;
+      }
+    ],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "getRedeemCase"
+  ): TypedContractMethod<
+    [redeemId: BigNumberish],
+    [
+      [string, string, bigint, bigint, bigint, bigint, bigint] & {
+        user_: string;
+        assetSymbol_: string;
+        susdAmount_: bigint;
+        ethAmount_: bigint;
         status_: bigint;
         createdAt_: bigint;
         approvals_: bigint;
@@ -942,6 +1217,9 @@ export interface BankVault extends BaseContract {
     nameOrSignature: "nextCaseId"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "nextLoanId"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "nextRedeemId"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
@@ -953,7 +1231,7 @@ export interface BankVault extends BaseContract {
   getFunction(
     nameOrSignature: "redeemToAsset"
   ): TypedContractMethod<
-    [assetSymbol: string, susdAmount: BigNumberish],
+    [assetSymbol: string, susdAmount: BigNumberish, ethAmount: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -961,6 +1239,20 @@ export interface BankVault extends BaseContract {
     nameOrSignature: "rejectEscrow"
   ): TypedContractMethod<
     [caseId: BigNumberish, reason: string],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "rejectLoan"
+  ): TypedContractMethod<
+    [loanId: BigNumberish, reason: string],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "rejectRedeem"
+  ): TypedContractMethod<
+    [redeemId: BigNumberish, reason: string],
     [void],
     "nonpayable"
   >;
@@ -1066,6 +1358,20 @@ export interface BankVault extends BaseContract {
     ImmediateTransferEvent.OutputObject
   >;
   getEvent(
+    key: "LoanApproved"
+  ): TypedContractEvent<
+    LoanApprovedEvent.InputTuple,
+    LoanApprovedEvent.OutputTuple,
+    LoanApprovedEvent.OutputObject
+  >;
+  getEvent(
+    key: "LoanRejected"
+  ): TypedContractEvent<
+    LoanRejectedEvent.InputTuple,
+    LoanRejectedEvent.OutputTuple,
+    LoanRejectedEvent.OutputObject
+  >;
+  getEvent(
     key: "LoanRepaid"
   ): TypedContractEvent<
     LoanRepaidEvent.InputTuple,
@@ -1078,6 +1384,20 @@ export interface BankVault extends BaseContract {
     LoanRequestedEvent.InputTuple,
     LoanRequestedEvent.OutputTuple,
     LoanRequestedEvent.OutputObject
+  >;
+  getEvent(
+    key: "RedeemApproved"
+  ): TypedContractEvent<
+    RedeemApprovedEvent.InputTuple,
+    RedeemApprovedEvent.OutputTuple,
+    RedeemApprovedEvent.OutputObject
+  >;
+  getEvent(
+    key: "RedeemRejected"
+  ): TypedContractEvent<
+    RedeemRejectedEvent.InputTuple,
+    RedeemRejectedEvent.OutputTuple,
+    RedeemRejectedEvent.OutputObject
   >;
   getEvent(
     key: "RedeemRequested"
@@ -1171,6 +1491,28 @@ export interface BankVault extends BaseContract {
       ImmediateTransferEvent.OutputObject
     >;
 
+    "LoanApproved(uint256,address,uint256)": TypedContractEvent<
+      LoanApprovedEvent.InputTuple,
+      LoanApprovedEvent.OutputTuple,
+      LoanApprovedEvent.OutputObject
+    >;
+    LoanApproved: TypedContractEvent<
+      LoanApprovedEvent.InputTuple,
+      LoanApprovedEvent.OutputTuple,
+      LoanApprovedEvent.OutputObject
+    >;
+
+    "LoanRejected(uint256,address,uint256,string)": TypedContractEvent<
+      LoanRejectedEvent.InputTuple,
+      LoanRejectedEvent.OutputTuple,
+      LoanRejectedEvent.OutputObject
+    >;
+    LoanRejected: TypedContractEvent<
+      LoanRejectedEvent.InputTuple,
+      LoanRejectedEvent.OutputTuple,
+      LoanRejectedEvent.OutputObject
+    >;
+
     "LoanRepaid(address,uint256)": TypedContractEvent<
       LoanRepaidEvent.InputTuple,
       LoanRepaidEvent.OutputTuple,
@@ -1182,7 +1524,7 @@ export interface BankVault extends BaseContract {
       LoanRepaidEvent.OutputObject
     >;
 
-    "LoanRequested(address,uint256,uint256)": TypedContractEvent<
+    "LoanRequested(uint256,address,uint256,uint256)": TypedContractEvent<
       LoanRequestedEvent.InputTuple,
       LoanRequestedEvent.OutputTuple,
       LoanRequestedEvent.OutputObject
@@ -1191,6 +1533,28 @@ export interface BankVault extends BaseContract {
       LoanRequestedEvent.InputTuple,
       LoanRequestedEvent.OutputTuple,
       LoanRequestedEvent.OutputObject
+    >;
+
+    "RedeemApproved(uint256,address,uint256,uint256)": TypedContractEvent<
+      RedeemApprovedEvent.InputTuple,
+      RedeemApprovedEvent.OutputTuple,
+      RedeemApprovedEvent.OutputObject
+    >;
+    RedeemApproved: TypedContractEvent<
+      RedeemApprovedEvent.InputTuple,
+      RedeemApprovedEvent.OutputTuple,
+      RedeemApprovedEvent.OutputObject
+    >;
+
+    "RedeemRejected(uint256,address,uint256,string)": TypedContractEvent<
+      RedeemRejectedEvent.InputTuple,
+      RedeemRejectedEvent.OutputTuple,
+      RedeemRejectedEvent.OutputObject
+    >;
+    RedeemRejected: TypedContractEvent<
+      RedeemRejectedEvent.InputTuple,
+      RedeemRejectedEvent.OutputTuple,
+      RedeemRejectedEvent.OutputObject
     >;
 
     "RedeemRequested(uint256,address,string,uint256)": TypedContractEvent<
