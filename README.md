@@ -139,9 +139,9 @@ npx hardhat run scripts/deploy.ts --network localhost
 - 自动写入 `frontend/src/contracts/addresses.json`。
 - 自动导出 ABI 到 `frontend/src/contracts/abis/*.json`。
 - 初始化一个测试用户与两个审计员（便于本地演示）。
-管理员：0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-用户：0x70997970C51812dc3A010C7d01b50e0d17dc79C8
-审计1：0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+管理员：0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \\
+用户：0x70997970C51812dc3A010C7d01b50e0d17dc79C8\\
+审计1：0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC\\
 审计2：0x90F79bf6EB2c4f870365E785982E1f101E93b906
 ## 6.4 启动前端
 
