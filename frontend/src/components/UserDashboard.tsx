@@ -22,7 +22,6 @@ export const UserDashboard: React.FC = () => {
   const [transferTo, setTransferTo] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
   const [loanAmount, setLoanAmount] = useState("");
-  const [faucetAmount, setFaucetAmount] = useState("10000");
 
   // 外币兑换统一使用 ETH
   const [assetSymbol, setAssetSymbol] = useState("ETH");
@@ -159,15 +158,6 @@ export const UserDashboard: React.FC = () => {
       const loanTx = await contracts.bankVault!.requestLoan(susdWei);
       await loanTx.wait();
     }, "Request Loan");
-  };
-
-  const onFaucet = () => {
-    const amt = faucetAmount.trim();
-    if (!amt || !contracts.token || !address) return;
-    tx(async () => {
-      const mintTx = await contracts.token!.mint(address, parseEther(amt));
-      await mintTx.wait();
-    }, "Faucet");
   };
 
   const onAssetDeposit = () => {
@@ -502,16 +492,6 @@ export const UserDashboard: React.FC = () => {
                 本次借贷约折合 <strong>{expectedLoanSUSD.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> sUSD（用于额度校验）
               </p>
             )}
-            <div className="form-row">
-              <label>领水 (sUSD)</label>
-              <input
-                type="text"
-                placeholder="数量"
-                value={faucetAmount}
-                onChange={(e) => setFaucetAmount(e.target.value)}
-              />
-              <button onClick={onFaucet} disabled={loading}>领水</button>
-            </div>
             <p className="hint">所有转账与赎回均需通过平台入口；大额或超日限转账将进入托管，需两名审计员批准后到账。</p>
           </section>
         </>
