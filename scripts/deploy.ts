@@ -102,20 +102,14 @@ async function main() {
   // 角色说明：部署后哪些地址是哪些角色
   console.log("\n========== 角色与地址 (Roles & Addresses) ==========");
   console.log("【管理员 Admin】");
-  console.log("  ", deployer.address, "  ← 部署账户（同时具备 KYC 官、风险官、sUSD 铸币权限）");
-  console.log("\n【审计员 Auditor】");
-  console.log("  部署后默认无。请在「管理员」页面用「添加审计员」为某地址授权。");
-  console.log("  示例：将账户 #1 设为审计员 → 在 Admin 控制台输入下方地址 #1 并点击「添加审计员」。");
-  console.log("\n【用户 User】");
-  console.log("  部署后默认无。请先用「管理员」账户在 Admin 页面：");
-  console.log("  1) 在「KYC 注册」填写要成为用户的地址、风险标签(0-255)、国家码 → 点击「注册 KYC」");
-  console.log("  2) 在「风险初始化」填写同一地址、风险分(1-100)、日限额(sUSD) → 点击「初始化风险」");
-  console.log("  之后该地址连接钱包会看到「用户」界面。");
-  console.log("\n本地 Hardhat 节点常用测试账户（前 3 个）：");
-  signers.slice(0, 3).forEach((s, i) => {
-    const label = i === 0 ? "管理员(部署者)" : i === 1 ? "可设为审计员/用户" : "可设为用户";
-    console.log("  #" + i, s.address, " ", label);
-  });
+  console.log("  Account #0:", deployer.address, " ← 部署账户");
+  console.log("\n【默认用户 User】");
+  console.log("  Account #1:", testUser.address, " ← 已自动完成 KYC 与风险初始化");
+  console.log("\n【默认审计员 Auditors】");
+  console.log("  Account #2:", auditor1.address, " ← 自动授权为审计员 1");
+  console.log("  Account #3:", auditor2.address, " ← 自动授权为审计员 2");
+  console.log("\n【空白测试账户】");
+  console.log("  Account #4 及以后: 纯白纸状态，可用于从零测试 Admin 手动开户流程");
   console.log("==================================================\n");
 }
 

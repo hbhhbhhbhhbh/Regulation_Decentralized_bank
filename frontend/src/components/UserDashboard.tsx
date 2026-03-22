@@ -68,12 +68,14 @@ export const UserDashboard: React.FC = () => {
   const fetchData = useCallback(async () => {
     if (!address || !contracts.bankVault || !contracts.riskEngine || !contracts.token) return;
     try {
+      const totalBorrowed = await contracts.bankVault.totalBorrowedSusd();
+      const totalDeposits = await contracts.bankVault.totalDepositsSusd();
       const [bal, tok, score, limit, bps, locked, stats] = await Promise.all([
         contracts.bankVault.balances(address),
         contracts.token.balanceOf(address),
         contracts.riskEngine.getRiskScore(address),
         contracts.riskEngine.getDailyLimit(address),
-        contracts.riskEngine.getInterestRateBps(address),
+        contracts.riskEngine.getInterestRateBps(address, totalBorrowed, totalDeposits),
         contracts.bankVault.lockedUntil(address),
         contracts.bankVault.dailyStats(address),
       ]);

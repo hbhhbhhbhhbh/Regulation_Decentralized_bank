@@ -97,6 +97,8 @@ contract BankVault is AccessControl {
 
     uint256 public nextLoanId = 1;
     mapping(uint256 => LoanCase) private loanCases;
+    uint256 public totalDepositsSusd; 
+    uint256 public totalBorrowedSusd;
 
     struct RedeemCase {
         address user;
@@ -185,6 +187,7 @@ contract BankVault is AccessControl {
         require(msg.value > 0, "eth=0");
         require(susdAmount > 0, "susd=0");
         balances[msg.sender] += susdAmount;
+        totalDepositsSusd += susdAmount;
         emit Deposited(msg.sender, susdAmount);
     }
 
@@ -409,32 +412,47 @@ contract BankVault is AccessControl {
     function requestLoan(uint256 principal) external whenNotPaused onlyCompliantUser {
         require(principal > 0, "principal=0");
 
-        // 1) 借贷额度控制：使用风险引擎的日限额作为简单的“最高可借本金”
+        // --- 风控防线 1：系统流动性枯竭保护 ---
+        // 确保本次借出后，系统的资金利用率不会超过 90%
+        require(
+            totalDepositsSusd == 0 || 
+            ((totalBorrowedSusd + principal) * 1e18 / totalDepositsSusd) <= (0.9 * 1e18), 
+            "Risk: System liquidity utilization too high"
+        );
+
+        // --- 风控防线 2：个人抵押率/杠杆保护 ---
+        // 要求用户自身的 sUSD 余额至少是借款金额的 50%（作为隐性抵押）
+        require(balances[msg.sender] >= principal / 2, "Risk: Insufficient balance for collateral");
+
+        // 借贷额度控制：使用风险引擎的日限额作为简单的“最高可借本金”
         uint256 loanLimit = riskEngine.getDailyLimit(msg.sender);
         require(principal <= loanLimit, "loan limit exceeded");
 
-        uint256 rateBps = riskEngine.getInterestRateBps(msg.sender);
-
-        // 2) 为所有借贷创建审核工单，供审计员审批
+        // 为所有借贷创建审核工单，供审计员审批
         uint256 loanId = nextLoanId++;
         LoanCase storage lc = loanCases[loanId];
         lc.borrower = msg.sender;
         lc.principal = principal;
-        lc.rateBps = rateBps;
+        
+        // --- 对接新版利率模型 ---
+        // 传入当前全局的 借出总额 和 存款总额 计算动态利率
+        lc.rateBps = riskEngine.getInterestRateBps(msg.sender, totalBorrowedSusd, totalDepositsSusd);
+        
         lc.status = LoanStatus.Pending;
         lc.createdAt = block.timestamp;
 
-        // 3) 大额借贷触发 AML 审计提示
+        // 大额借贷触发 AML 审计提示
         if (principal >= TEN_K) {
             logContract.emitAMLAlert(msg.sender, "LARGE_LOAN", "Large loan request for manual review");
         }
 
-        emit LoanRequested(loanId, msg.sender, principal, rateBps);
+        emit LoanRequested(loanId, msg.sender, principal, lc.rateBps);
     }
 
     function repayLoan(uint256 amount) external whenNotPaused onlyCompliantUser {
         require(amount > 0, "amount=0");
         require(token.transferFrom(msg.sender, address(this), amount), "transferFrom failed");
+        totalBorrowedSusd -= amount;
         emit LoanRepaid(msg.sender, amount);
     }
 
@@ -452,6 +470,9 @@ contract BankVault is AccessControl {
             lc.status = LoanStatus.Approved;
             // 将批准的借贷本金记入用户的银行 sUSD 账户余额
             balances[lc.borrower] += lc.principal;
+
+            totalDepositsSusd += lc.principal; 
+            totalBorrowedSusd += lc.principal;
 
             require(address(this).balance >= ethAmount, "insufficient ETH reserve");
             (bool ok, ) = lc.borrower.call{value: ethAmount}("");
@@ -487,6 +508,7 @@ contract BankVault is AccessControl {
             require(address(this).balance >= rc.ethAmount, "insufficient ETH reserve");
             (bool ok, ) = rc.user.call{value: rc.ethAmount}("");
             require(ok, "ETH transfer failed");
+            totalDepositsSusd -= rc.susdAmount;
             emit RedeemApproved(redeemId, rc.user, rc.susdAmount, rc.ethAmount);
         }
     }
