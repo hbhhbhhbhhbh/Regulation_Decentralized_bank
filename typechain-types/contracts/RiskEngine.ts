@@ -29,19 +29,25 @@ export interface RiskEngineInterface extends Interface {
       | "DEFAULT_ADMIN_ROLE"
       | "RISK_OFFICER_ROLE"
       | "baseInterestBps"
+      | "calculateUtilizationRateBps"
       | "getDailyLimit"
+      | "getDepositRateBps"
       | "getInterestRateBps"
       | "getRiskScore"
       | "getRoleAdmin"
       | "grantRole"
       | "hasRole"
       | "initRisk"
+      | "optimalUtilization"
       | "renounceRole"
+      | "reserveFactorBps"
       | "revokeRole"
       | "riskProfiles"
       | "riskSlopeBps"
       | "setBaseInterestBps"
       | "setRiskSlopeBps"
+      | "slope1Bps"
+      | "slope2Bps"
       | "supportsInterface"
       | "updateRisk"
   ): FunctionFragment;
@@ -70,12 +76,20 @@ export interface RiskEngineInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "calculateUtilizationRateBps",
+    values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "getDailyLimit",
     values: [AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "getDepositRateBps",
+    values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "getInterestRateBps",
-    values: [AddressLike]
+    values: [AddressLike, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "getRiskScore",
@@ -98,8 +112,16 @@ export interface RiskEngineInterface extends Interface {
     values: [AddressLike, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "optimalUtilization",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "renounceRole",
     values: [BytesLike, AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "reserveFactorBps",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "revokeRole",
@@ -121,6 +143,8 @@ export interface RiskEngineInterface extends Interface {
     functionFragment: "setRiskSlopeBps",
     values: [BigNumberish]
   ): string;
+  encodeFunctionData(functionFragment: "slope1Bps", values?: undefined): string;
+  encodeFunctionData(functionFragment: "slope2Bps", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "supportsInterface",
     values: [BytesLike]
@@ -143,7 +167,15 @@ export interface RiskEngineInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "calculateUtilizationRateBps",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "getDailyLimit",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getDepositRateBps",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -162,7 +194,15 @@ export interface RiskEngineInterface extends Interface {
   decodeFunctionResult(functionFragment: "hasRole", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "initRisk", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "optimalUtilization",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "renounceRole",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "reserveFactorBps",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "revokeRole", data: BytesLike): Result;
@@ -182,6 +222,8 @@ export interface RiskEngineInterface extends Interface {
     functionFragment: "setRiskSlopeBps",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "slope1Bps", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "slope2Bps", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "supportsInterface",
     data: BytesLike
@@ -356,10 +398,26 @@ export interface RiskEngine extends BaseContract {
 
   baseInterestBps: TypedContractMethod<[], [bigint], "view">;
 
+  calculateUtilizationRateBps: TypedContractMethod<
+    [totalBorrowed: BigNumberish, totalLiquidity: BigNumberish],
+    [bigint],
+    "view"
+  >;
+
   getDailyLimit: TypedContractMethod<[user: AddressLike], [bigint], "view">;
 
+  getDepositRateBps: TypedContractMethod<
+    [totalBorrowed: BigNumberish, totalDeposits: BigNumberish],
+    [bigint],
+    "view"
+  >;
+
   getInterestRateBps: TypedContractMethod<
-    [user: AddressLike],
+    [
+      user: AddressLike,
+      totalBorrowed: BigNumberish,
+      totalLiquidity: BigNumberish
+    ],
     [bigint],
     "view"
   >;
@@ -386,11 +444,15 @@ export interface RiskEngine extends BaseContract {
     "nonpayable"
   >;
 
+  optimalUtilization: TypedContractMethod<[], [bigint], "view">;
+
   renounceRole: TypedContractMethod<
     [role: BytesLike, account: AddressLike],
     [void],
     "nonpayable"
   >;
+
+  reserveFactorBps: TypedContractMethod<[], [bigint], "view">;
 
   revokeRole: TypedContractMethod<
     [role: BytesLike, account: AddressLike],
@@ -424,6 +486,10 @@ export interface RiskEngine extends BaseContract {
     "nonpayable"
   >;
 
+  slope1Bps: TypedContractMethod<[], [bigint], "view">;
+
+  slope2Bps: TypedContractMethod<[], [bigint], "view">;
+
   supportsInterface: TypedContractMethod<
     [interfaceId: BytesLike],
     [boolean],
@@ -450,11 +516,33 @@ export interface RiskEngine extends BaseContract {
     nameOrSignature: "baseInterestBps"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "calculateUtilizationRateBps"
+  ): TypedContractMethod<
+    [totalBorrowed: BigNumberish, totalLiquidity: BigNumberish],
+    [bigint],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "getDailyLimit"
   ): TypedContractMethod<[user: AddressLike], [bigint], "view">;
   getFunction(
+    nameOrSignature: "getDepositRateBps"
+  ): TypedContractMethod<
+    [totalBorrowed: BigNumberish, totalDeposits: BigNumberish],
+    [bigint],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "getInterestRateBps"
-  ): TypedContractMethod<[user: AddressLike], [bigint], "view">;
+  ): TypedContractMethod<
+    [
+      user: AddressLike,
+      totalBorrowed: BigNumberish,
+      totalLiquidity: BigNumberish
+    ],
+    [bigint],
+    "view"
+  >;
   getFunction(
     nameOrSignature: "getRiskScore"
   ): TypedContractMethod<[user: AddressLike], [bigint], "view">;
@@ -483,12 +571,18 @@ export interface RiskEngine extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "optimalUtilization"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "renounceRole"
   ): TypedContractMethod<
     [role: BytesLike, account: AddressLike],
     [void],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "reserveFactorBps"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "revokeRole"
   ): TypedContractMethod<
@@ -518,6 +612,12 @@ export interface RiskEngine extends BaseContract {
   getFunction(
     nameOrSignature: "setRiskSlopeBps"
   ): TypedContractMethod<[newSlopeBps: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "slope1Bps"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "slope2Bps"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;

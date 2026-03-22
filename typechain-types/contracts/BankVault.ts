@@ -75,6 +75,8 @@ export interface BankVaultInterface extends Interface {
       | "setFrequencyParams"
       | "supportsInterface"
       | "token"
+      | "totalBorrowedSusd"
+      | "totalDepositsSusd"
       | "transfer"
       | "unlockAccount"
       | "unpause"
@@ -283,6 +285,14 @@ export interface BankVaultInterface extends Interface {
   ): string;
   encodeFunctionData(functionFragment: "token", values?: undefined): string;
   encodeFunctionData(
+    functionFragment: "totalBorrowedSusd",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "totalDepositsSusd",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "transfer",
     values: [AddressLike, BigNumberish]
   ): string;
@@ -432,6 +442,14 @@ export interface BankVaultInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "token", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "totalBorrowedSusd",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "totalDepositsSusd",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "transfer", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "unlockAccount",
@@ -1046,6 +1064,10 @@ export interface BankVault extends BaseContract {
 
   token: TypedContractMethod<[], [string], "view">;
 
+  totalBorrowedSusd: TypedContractMethod<[], [bigint], "view">;
+
+  totalDepositsSusd: TypedContractMethod<[], [bigint], "view">;
+
   transfer: TypedContractMethod<
     [to: AddressLike, amount: BigNumberish],
     [void],
@@ -1305,6 +1327,12 @@ export interface BankVault extends BaseContract {
   getFunction(
     nameOrSignature: "token"
   ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "totalBorrowedSusd"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "totalDepositsSusd"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "transfer"
   ): TypedContractMethod<

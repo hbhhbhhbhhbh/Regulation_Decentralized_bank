@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { WalletProvider, useWallet } from "./context/WalletContext";
 import { RatesProvider } from "./context/RatesContext";
 import { RatesPanel } from "./components/RatesPanel";
@@ -7,14 +7,28 @@ import { UserDashboard } from "./components/UserDashboard";
 import { AuditorDashboard } from "./components/AuditorDashboard";
 import { AdminDashboard } from "./components/AdminDashboard";
 
+import { InterestSimulator } from "./components/InterestSimulator";
+
 function AppContent() {
   const { address, role, connect, disconnect } = useWallet();
+
+  const [showSimulator, setShowSimulator] = useState(false);
 
   return (
     <div className="app">
       <header className="app-header">
         <div>
-          <h1>SafeHarbor Bank</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+            <h1>SafeHarbor Bank</h1>
+            {/* 新增切换按钮 */}
+            <button 
+              type="button" 
+              className="subtab active" 
+              onClick={() => setShowSimulator(!showSimulator)}
+            >
+              {showSimulator ? "返回银行业务" : "打开利率模拟器"}
+            </button>
+          </div>
           <p className="tagline">Regulation-as-Code · 访客可查牌价与 KYC 流程；用户操作需登录</p>
         </div>
         <div className="header-wallet">
@@ -41,12 +55,18 @@ function AppContent() {
         </div>
       </header>
       <main className="app-main">
-        <RatesPanel />
-
-        {(!address || role === "none") && <PublicBankView />}
-        {address && role === "user" && <UserDashboard />}
-        {address && role === "auditor" && <AuditorDashboard />}
-        {address && role === "admin" && <AdminDashboard />}
+        {/* 根据状态判断：显示模拟器，还是显示正常的银行业务大盘 */}
+        {showSimulator ? (
+          <InterestSimulator />
+        ) : (
+          <>
+            <RatesPanel />
+            {(!address || role === "none") && <PublicBankView />}
+            {address && role === "user" && <UserDashboard />}
+            {address && role === "auditor" && <AuditorDashboard />}
+            {address && role === "admin" && <AdminDashboard />}
+          </>
+        )}
       </main>
     </div>
   );
